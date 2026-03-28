@@ -1,0 +1,1967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gunflint Lodge — Weddings & Events CRM</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    :root {
+      --forest: #2a4a1e;
+      --forest2: #3d6b2c;
+      --forest-pale: #eaf2e5;
+      --gold: #c9a84c;
+      --gold-lt: #f0dc99;
+      --cream: #faf7f2;
+      --white: #ffffff;
+      --border: #e2d9cc;
+      --text: #1c1c1c;
+      --muted: #6b6b6b;
+      --red: #c0392b;
+      --orange: #d97706;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--cream);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── TOP BAR ── */
+    .topbar {
+      background: var(--forest);
+      color: #fff;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 14px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+    .topbar-logo { font-size: 16px; font-weight: 700; color: var(--gold-lt); letter-spacing:.4px; white-space:nowrap; }
+    .topbar-divider { width:1px; height:24px; background:rgba(255,255,255,.2); }
+    .topbar-title { font-size:13px; color:rgba(255,255,255,.6); }
+    .topbar-search {
+      flex:1; max-width:280px; margin-left:auto;
+    }
+    .topbar-search input {
+      width:100%; padding:6px 14px; border-radius:18px; border:none;
+      background:rgba(255,255,255,.15); color:#fff; font-size:13px; outline:none;
+    }
+    .topbar-search input::placeholder { color:rgba(255,255,255,.45); }
+    .btn-add {
+      padding:7px 15px; background:var(--gold); color:var(--forest); border:none;
+      border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;
+    }
+    .btn-add:hover { background:var(--gold-lt); }
+
+    /* ── PIPELINE BAR ── */
+    .pipeline-bar {
+      background:#fff; border-bottom:1px solid var(--border);
+      display:flex; gap:0; flex-shrink:0;
+    }
+    .pipe-stage {
+      flex:1; text-align:center; padding:10px 8px;
+      border-right:1px solid var(--border); cursor:pointer;
+      transition:background .1s;
+    }
+    .pipe-stage:last-child { border-right:none; }
+    .pipe-stage:hover { background:var(--forest-pale); }
+    .pipe-stage.active { background:var(--forest-pale); border-bottom:2px solid var(--forest); }
+    .pipe-count { font-size:20px; font-weight:800; color:var(--forest); }
+    .pipe-label { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); font-weight:600; }
+
+    /* ── MAIN LAYOUT ── */
+    .main { display:flex; flex:1; overflow:hidden; }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width:272px; flex-shrink:0; background:#fff;
+      border-right:1px solid var(--border);
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+    .sidebar-filters {
+      padding:10px 12px; border-bottom:1px solid var(--border);
+      display:flex; gap:6px; flex-wrap:wrap;
+    }
+    .fpill {
+      padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600;
+      cursor:pointer; border:1px solid var(--border); background:var(--cream); color:var(--muted);
+      transition:all .12s;
+    }
+    .fpill.on { background:var(--forest); color:#fff; border-color:var(--forest); }
+    .client-list { flex:1; overflow-y:auto; }
+    .cli {
+      padding:13px 14px; border-bottom:1px solid var(--border);
+      cursor:pointer; transition:background .1s; border-left:3px solid transparent;
+    }
+    .cli:hover { background:var(--forest-pale); }
+    .cli.active { background:var(--forest-pale); border-left-color:var(--forest); }
+    .cli-name { font-weight:700; font-size:13px; margin-bottom:2px; }
+    .cli-date { font-size:11px; color:var(--muted); margin-bottom:6px; }
+    .cli-row { display:flex; align-items:center; gap:6px; }
+    .spill {
+      font-size:10px; font-weight:700; padding:2px 7px; border-radius:9px; text-transform:uppercase; letter-spacing:.3px;
+    }
+    .s-inquiry  { background:#fef3c7; color:#92400e; }
+    .s-proposal { background:#dbeafe; color:#1e40af; }
+    .s-booked   { background:#dcfce7; color:#166534; }
+    .s-complete { background:#f3f4f6; color:#374151; }
+    .s-lost     { background:#fee2e2; color:#991b1b; }
+    .cli-last { font-size:10px; color:var(--muted); margin-left:auto; }
+    .overdue-dot { width:7px; height:7px; border-radius:50%; background:var(--red); flex-shrink:0; }
+
+    /* ── DETAIL PANEL ── */
+    .detail { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+    .detail-empty {
+      flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      color:var(--muted); gap:10px;
+    }
+    .detail-empty-icon { font-size:48px; opacity:.3; }
+    .detail-empty-text { font-size:15px; }
+
+    /* Detail Header */
+    .dh {
+      background:#fff; border-bottom:1px solid var(--border);
+      padding:18px 24px 0; flex-shrink:0;
+    }
+    .dh-top { display:flex; align-items:flex-start; gap:12px; margin-bottom:14px; }
+    .dh-names { flex:1; }
+    .dh-client-name { font-size:22px; font-weight:800; }
+    .dh-wedding-date { font-size:13px; color:var(--muted); margin-top:2px; }
+    .dh-actions { display:flex; gap:8px; }
+    .dh-stats { display:flex; gap:20px; padding:0 0 12px; }
+    .stat { text-align:center; }
+    .stat-v { font-size:18px; font-weight:800; color:var(--forest); }
+    .stat-l { font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
+
+    /* Next action banner */
+    .na-bar {
+      padding:9px 14px; border-radius:6px; margin-bottom:12px; font-size:13px;
+    }
+    .na-bar.due { background:#fffbeb; border:1px solid #fde68a; }
+    .na-bar.overdue { background:#fef2f2; border:1px solid #fecaca; }
+    .na-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#92400e; }
+    .na-bar.overdue .na-label { color:var(--red); }
+    .na-text { font-weight:600; }
+    .na-date { font-size:12px; color:var(--muted); }
+
+    /* Tabs */
+    .tabs { display:flex; }
+    .tab {
+      padding:10px 18px; font-size:13px; font-weight:600; color:var(--muted);
+      cursor:pointer; border-bottom:2px solid transparent; transition:all .12s;
+    }
+    .tab.active { color:var(--forest); border-bottom-color:var(--forest); }
+    .tab:hover:not(.active) { color:var(--text); }
+
+    /* Tab content */
+    .tc { flex:1; overflow-y:auto; padding:22px 24px; }
+
+    /* Overview */
+    .ov-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px; }
+    .ov-card { background:#fff; border:1px solid var(--border); border-radius:9px; padding:16px; }
+    .ov-card-title { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin-bottom:10px; }
+    .ov-row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--forest-pale); font-size:13px; }
+    .ov-row:last-child { border-bottom:none; }
+    .ov-key { color:var(--muted); }
+    .ov-val { font-weight:600; text-align:right; }
+
+    /* Contact Log */
+    .log-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+    .log-header h3 { font-size:15px; font-weight:700; }
+    .entry { display:flex; gap:14px; margin-bottom:12px; position:relative; }
+    .entry::before {
+      content:''; position:absolute; left:17px; top:36px; bottom:-12px;
+      width:2px; background:var(--border);
+    }
+    .entry:last-child::before { display:none; }
+    .entry-icon {
+      width:36px; height:36px; border-radius:50%; display:flex; align-items:center;
+      justify-content:center; font-size:16px; flex-shrink:0;
+      background:var(--forest-pale); border:2px solid var(--border); z-index:1;
+    }
+    .entry-body {
+      flex:1; background:#fff; border:1px solid var(--border); border-radius:8px;
+      padding:12px 14px;
+    }
+    .entry-meta { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+    .etype {
+      font-size:10px; font-weight:700; padding:2px 7px; border-radius:9px; text-transform:uppercase;
+    }
+    .et-email    { background:#dbeafe; color:#1e40af; }
+    .et-call     { background:#dcfce7; color:#166534; }
+    .et-meeting  { background:#fef3c7; color:#92400e; }
+    .et-site     { background:#ede9fe; color:#5b21b6; }
+    .et-note     { background:#f3f4f6; color:#374151; }
+    .entry-by { font-size:11px; color:var(--muted); margin-left:auto; }
+    .entry-notes { font-size:13px; line-height:1.65; }
+    .action-list { margin-top:9px; padding-top:9px; border-top:1px solid var(--border); }
+    .action-item { display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; }
+    .action-item input { cursor:pointer; }
+    .action-item.done span { text-decoration:line-through; color:var(--muted); }
+
+    /* Wedding Details */
+    .wd-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .wd-card { background:#fff; border:1px solid var(--border); border-radius:9px; padding:16px; }
+    .wd-card.full { grid-column:1/-1; }
+    .wd-title {
+      font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.8px;
+      color:var(--forest); padding-bottom:10px; border-bottom:1px solid var(--border); margin-bottom:12px;
+    }
+    .wd-row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--forest-pale); font-size:13px; }
+    .wd-row:last-child { border-bottom:none; }
+    .wd-k { color:var(--muted); }
+    .wd-v { font-weight:600; text-align:right; max-width:55%; }
+    .vendor-list { font-size:13px; }
+    .vendor-row { padding:5px 0; border-bottom:1px solid var(--forest-pale); display:flex; gap:8px; }
+    .vendor-row:last-child { border-bottom:none; }
+    .vendor-type { font-weight:700; color:var(--forest); width:110px; flex-shrink:0; }
+
+    /* Day-of Plan */
+    .dop-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+    .dop-header h3 { font-size:15px; font-weight:700; }
+    .tl { position:relative; }
+    .tl-item { display:flex; gap:14px; margin-bottom:10px; }
+    .tl-time { width:68px; font-size:12px; font-weight:700; color:var(--forest); text-align:right; flex-shrink:0; padding-top:3px; }
+    .tl-dot-wrap { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
+    .tl-dot { width:10px; height:10px; border-radius:50%; background:var(--forest); margin-top:4px; flex-shrink:0; }
+    .tl-line { flex:1; width:2px; background:var(--border); margin-top:2px; }
+    .tl-item:last-child .tl-line { display:none; }
+    .tl-body { flex:1; background:#fff; border:1px solid var(--border); border-radius:7px; padding:9px 12px; margin-bottom:8px; }
+    .tl-event { font-size:13px; font-weight:700; }
+    .tl-detail { font-size:12px; color:var(--muted); margin-top:2px; }
+
+    /* Buttons */
+    .btn-primary {
+      padding:8px 16px; background:var(--forest); color:#fff; border:none;
+      border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;
+    }
+    .btn-primary:hover { background:var(--forest2); }
+    .btn-ghost {
+      padding:8px 14px; background:#fff; color:var(--text); border:1px solid var(--border);
+      border-radius:6px; font-size:13px; font-weight:500; cursor:pointer;
+    }
+    .btn-ghost:hover { background:var(--forest-pale); }
+    .btn-danger {
+      padding:7px 14px; background:#fee2e2; color:var(--red); border:none;
+      border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;
+    }
+
+    /* Modal */
+    .overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex;
+      align-items:center; justify-content:center; z-index:1000;
+    }
+    .modal {
+      background:#fff; border-radius:12px; padding:24px; width:500px;
+      max-height:82vh; overflow-y:auto;
+      box-shadow:0 24px 60px rgba(0,0,0,.3);
+    }
+    .modal h3 { font-size:17px; font-weight:800; margin-bottom:18px; }
+    .fg { margin-bottom:14px; }
+    .fg label { display:block; font-size:12px; font-weight:600; margin-bottom:5px; }
+    .fg input, .fg select, .fg textarea {
+      width:100%; padding:8px 11px; border:1px solid var(--border); border-radius:6px;
+      font-size:13px; color:var(--text); background:var(--cream); outline:none;
+    }
+    .fg input:focus, .fg select:focus, .fg textarea:focus {
+      border-color:var(--forest); background:#fff;
+    }
+    .fg textarea { resize:vertical; min-height:72px; }
+    .fgrow { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .modal-foot { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+    .hidden { display:none !important; }
+
+    /* Loading state */
+    .loading-overlay {
+      position: fixed; inset: 0; background: rgba(255,255,255,0.7);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 2000;
+    }
+    .spinner {
+      width: 40px; height: 40px; border: 4px solid var(--forest-pale);
+      border-top-color: var(--forest); border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { margin-top: 12px; font-size: 14px; font-weight: 600; color: var(--forest); }
+
+    /* Event Type Badges */
+    .evt-wedding      { background:#fdf2f8; color:#9d174d; }
+    .evt-elopement    { background:#fef3c7; color:#92400e; }
+    .evt-corporate    { background:#dbeafe; color:#1e40af; }
+    .evt-anniversary  { background:#dcfce7; color:#166534; }
+    .evt-family_reunion { background:#ede9fe; color:#5b21b6; }
+    .evt-other        { background:#f3f4f6; color:#374151; }
+
+    /* Tasks Tab */
+    .task-item { display:flex; align-items:flex-start; gap:10px; padding:11px 14px; border-bottom:1px solid var(--forest-pale); }
+    .task-item:last-child { border-bottom:none; }
+    .task-item.done .task-title { text-decoration:line-through; color:var(--muted); }
+    .task-check { margin-top:2px; cursor:pointer; width:15px; height:15px; flex-shrink:0; accent-color:var(--forest); }
+    .task-title { font-size:13px; font-weight:600; }
+    .task-desc { font-size:12px; color:var(--muted); margin-top:2px; }
+    .task-due  { font-size:11px; color:var(--muted); margin-top:3px; }
+    .task-due.overdue { color:var(--red); font-weight:600; }
+    .task-section { background:#fff; border:1px solid var(--border); border-radius:9px; overflow:hidden; margin-bottom:16px; }
+    .task-section-hdr { padding:9px 14px; border-bottom:1px solid var(--border); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width:5px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+    /* Print button */
+    @media print {
+      .topbar, .pipeline-bar, .sidebar, .tabs, .log-header, .dop-header { display:none; }
+      .main { display:block; }
+      .detail { overflow:visible; }
+      .tc { padding:0; overflow:visible; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" style="display:none; position:fixed; inset:0; background:#1a3a1a; z-index:9999; align-items:center; justify-content:center; flex-direction:column;">
+  <div style="background:#fff; border-radius:12px; padding:40px 36px; width:340px; box-shadow:0 8px 40px rgba(0,0,0,0.3);">
+    <div style="text-align:center; margin-bottom:28px;">
+      <div style="font-size:28px;">🌲</div>
+      <div style="font-size:20px; font-weight:700; color:#1a3a1a; margin-top:6px;">Gunflint CRM</div>
+      <div style="font-size:13px; color:#888; margin-top:4px;">Weddings & Events</div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <input id="loginEmail" type="email" placeholder="Email" style="width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px; box-sizing:border-box;" />
+    </div>
+    <div style="margin-bottom:20px;">
+      <input id="loginPassword" type="password" placeholder="Password" style="width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px; box-sizing:border-box;" onkeydown="if(event.key==='Enter') doLogin()" />
+    </div>
+    <div id="loginError" style="color:#dc2626; font-size:12px; margin-bottom:12px; text-align:center; display:none;"></div>
+    <button onclick="doLogin()" style="width:100%; padding:11px; background:#1a3a1a; color:#fff; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer;">Sign In</button>
+  </div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay" class="loading-overlay hidden">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading Data...</div>
+</div>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo">🌲 Gunflint Lodge</div>
+  <div class="topbar-divider"></div>
+  <div class="topbar-title">Weddings & Events CRM</div>
+  <div class="topbar-search"><input id="searchInput" placeholder="Search clients…" oninput="filterClients()" /></div>
+  <button class="btn-add" onclick="openNewClientModal()">+ New Client</button>
+  <button id="myTasksBtn" onclick="toggleMyTasksView()" style="background:none;border:1px solid rgba(255,255,255,.25);color:#eee;font-size:12px;cursor:pointer;padding:4px 12px;border-radius:6px;margin-right:6px;" title="My Tasks">📋 My Tasks</button>
+  <button onclick="doSignOut()" style="background:none;border:none;color:#aaa;font-size:12px;cursor:pointer;padding:0 12px;" title="Sign out">⎋ Sign out</button>
+</div>
+
+<!-- PIPELINE BAR -->
+<div class="pipeline-bar" id="pipelineBar"></div>
+
+<!-- MY TASKS VIEW -->
+<div id="myTasksView" style="display:none;flex:1;overflow-y:auto;padding:24px 32px;background:var(--cream);">
+  <div style="max-width:780px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:18px;color:var(--forest);font-weight:700;">📋 My Tasks</h2>
+      <div style="display:flex;gap:8px;">
+        <button onclick="setMyTasksFilter('pending')" id="mtf-pending" class="btn-primary" style="font-size:12px;padding:5px 14px;">Open</button>
+        <button onclick="setMyTasksFilter('done')" id="mtf-done" class="btn-ghost" style="font-size:12px;padding:5px 14px;">Completed</button>
+        <button onclick="setMyTasksFilter('all')" id="mtf-all" class="btn-ghost" style="font-size:12px;padding:5px 14px;">All</button>
+      </div>
+    </div>
+    <div id="myTasksList"></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main" id="mainView">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-filters" id="filterPills"></div>
+    <div class="client-list" id="clientList"></div>
+  </div>
+
+  <!-- DETAIL PANEL -->
+  <div class="detail" id="detail">
+    <div class="detail-empty" id="emptyState">
+      <div class="detail-empty-icon">💍</div>
+      <div class="detail-empty-text">Select a client to view details</div>
+    </div>
+    <div id="clientDetail" class="hidden" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+      <!-- Detail Header -->
+      <div class="dh" id="detailHeader"></div>
+      <!-- Tab Content -->
+      <div class="tc" id="tabContent"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MODAL: Promote Action Item to Task -->
+<div class="overlay hidden" id="promoteTaskModal">
+  <div class="modal" style="width:420px;">
+    <h3>Convert to Task</h3>
+    <div class="fg"><label>Task Title</label><input id="pt-title" style="background:#fff;"/></div>
+    <div class="fgrow">
+      <div class="fg"><label>Due Date</label><input id="pt-due" type="date"/></div>
+      <div class="fg"><label>Assigned To</label>
+        <select id="pt-assigned">
+          <option>Mae</option><option>Mindy</option><option>John</option><option>Ron</option>
+        </select>
+      </div>
+    </div>
+    <input type="hidden" id="pt-action-id"/>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('promoteTaskModal')">Cancel</button>
+      <button class="btn-primary" onclick="savePromotedTask()">Create Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: New Client -->
+<div class="overlay hidden" id="newClientModal">
+  <div class="modal">
+    <h3>New Event Client</h3>
+    <div class="fgrow">
+      <div class="fg"><label>Partner 1 Name</label><input id="nc-p1" placeholder="First & Last Name"/></div>
+      <div class="fg"><label>Partner 2 Name</label><input id="nc-p2" placeholder="First & Last Name"/></div>
+    </div>
+    <div class="fgrow">
+      <div class="fg"><label>Email</label><input id="nc-email" type="email" placeholder="email@example.com"/></div>
+      <div class="fg"><label>Phone</label><input id="nc-phone" placeholder="612-555-0100"/></div>
+    </div>
+    <div class="fgrow">
+      <div class="fg"><label>Wedding Date</label><input id="nc-wdate" type="date"/></div>
+      <div class="fg"><label>Estimated Guest Count</label><input id="nc-guests" type="number" placeholder="100"/></div>
+    </div>
+    <div class="fg"><label>Event Type</label>
+      <select id="nc-type">
+        <option value="wedding">💍 Wedding</option>
+        <option value="elopement">🌿 Elopement</option>
+        <option value="corporate">💼 Corporate Event</option>
+        <option value="anniversary">🥂 Anniversary</option>
+        <option value="family_reunion">👨‍👩‍👧‍👦 Family Reunion</option>
+        <option value="other">✨ Other</option>
+      </select>
+    </div>
+    <div class="fgrow">
+      <div class="fg"><label>Status</label>
+        <select id="nc-status">
+          <option value="inquiry">Inquiry</option>
+          <option value="proposal">Proposal Sent</option>
+          <option value="booked">Booked</option>
+        </select>
+      </div>
+      <div class="fg"><label>Assigned To</label>
+        <select id="nc-coord">
+          <option>Mae</option><option>Mindy</option><option>Ron</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg"><label>How did they hear about us?</label><input id="nc-source" placeholder="Instagram, referral, wedding wire…"/></div>
+    <div class="fg"><label>Initial Notes</label><textarea id="nc-notes" placeholder="Summary of initial inquiry…"></textarea></div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('newClientModal')">Cancel</button>
+      <button class="btn-primary" onclick="saveNewClient()">Create Client</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: New Task -->
+<div class="overlay hidden" id="newTaskModal">
+  <div class="modal">
+    <h3>Add Task</h3>
+    <div class="fg"><label>Task Title</label><input id="nt-title" placeholder="e.g. Send menu options for review"/></div>
+    <div class="fgrow">
+      <div class="fg"><label>Due Date</label><input id="nt-due" type="date"/></div>
+      <div class="fg"><label>Assigned To</label>
+        <select id="nt-assigned">
+          <option>Mae</option><option>Mindy</option><option>John</option><option>Ron</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg"><label>Notes (optional)</label><textarea id="nt-desc" placeholder="Additional context…"></textarea></div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('newTaskModal')">Cancel</button>
+      <button class="btn-primary" onclick="saveNewTask()">Add Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Mae Draft -->
+<div class="overlay hidden" id="maeDraftModal">
+  <div class="modal" style="width:560px;">
+    <h3>✉️ Suggested Follow-Up Draft</h3>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Mae drafted this follow-up for the coordinator. Edit before sending.</p>
+    <div class="fg"><label>Subject</label><input id="md-subject" style="background:#fff;"/></div>
+    <div class="fg"><label>Body</label><textarea id="md-body" style="min-height:220px;background:#fff;font-size:13px;line-height:1.6;"></textarea></div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('maeDraftModal')">Close</button>
+      <button class="btn-primary" onclick="copyDraft()">📋 Copy to Clipboard</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Log Contact -->
+<div class="overlay hidden" id="logContactModal">
+  <div class="modal">
+    <h3>Log Interaction</h3>
+    <div class="fgrow">
+      <div class="fg"><label>Date</label><input id="lc-date" type="date"/></div>
+      <div class="fg"><label>Type</label>
+        <select id="lc-type">
+          <option value="email">📧 Email</option>
+          <option value="call">📞 Phone Call</option>
+          <option value="meeting">🤝 Meeting</option>
+          <option value="site">🏕 Site Visit</option>
+          <option value="note">📝 Note</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg"><label>Summary / Notes</label><textarea id="lc-notes" placeholder="What was discussed, decided, or noted…"></textarea></div>
+    <div class="fg"><label>Action Items (one per line)</label><textarea id="lc-actions" placeholder="Send menu options&#10;Confirm cabin block&#10;Schedule site visit"></textarea></div>
+    <div class="fgrow">
+      <div class="fg"><label>Next Follow-up Action</label><input id="lc-nextaction" placeholder="e.g. Confirm tasting date"/></div>
+      <div class="fg"><label>Next Follow-up Date</label><input id="lc-nextdate" type="date"/></div>
+    </div>
+    <div class="fg"><label>Logged by</label>
+      <select id="lc-by">
+        <option>Mae</option><option>Mindy</option><option>John</option><option>Ron</option>
+      </select>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('logContactModal')">Cancel</button>
+      <button class="btn-primary" onclick="saveContactLog()">Save Log Entry</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  SUPABASE CONFIG
+// ─────────────────────────────────────────────
+const SUPABASE_URL = 'https://ejtohxvxbwnwalpquugr.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqdG9oeHZ4Yndud2FscHF1dWdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjI4NDYsImV4cCI6MjA5MDE5ODg0Nn0.d6WZ2_RMkcpEsFCIksXselbP90RRi1kBjmW8SWVaG0Q';
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ─────────────────────────────────────────────
+//  AUTH
+// ─────────────────────────────────────────────
+function showLoginScreen(show) {
+  const s = document.getElementById('loginScreen');
+  s.style.display = show ? 'flex' : 'none';
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  const { error } = await _supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    errEl.textContent = 'Invalid email or password.';
+    errEl.style.display = 'block';
+  } else {
+    showLoginScreen(false);
+    const { data: { user } } = await _supabase.auth.getUser();
+    currentUserName = EMAIL_TO_NAME[user?.email] || 'Mae';
+    loadAppData();
+  }
+}
+
+async function doSignOut() {
+  await _supabase.auth.signOut();
+  clients = [];
+  document.getElementById('clientList').innerHTML = '';
+  document.getElementById('pipelineBar').innerHTML = '';
+  document.getElementById('clientDetail').classList.add('hidden');
+  document.getElementById('emptyState').style.display = '';
+  showLoginScreen(true);
+}
+
+// ─────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────
+let clients = [];
+let activeClient = null;
+let activeTab = 'overview';
+let currentUserName = 'Mae';
+let myTasksFilterMode = 'pending';
+
+const EMAIL_TO_NAME = {
+  'mae@gunflint.com': 'Mae',
+  'mindy@gunflint.com': 'Mindy',
+  'ron@gunflint.com': 'Ron',
+  'john@gunflint.com': 'John'
+};
+let activeFilter = 'all';
+let activeTypeFilter = 'all';
+let editingDetails = false;
+let pendingVendorDeletes = [];
+let pendingVendorAdds = [];
+
+// ─────────────────────────────────────────────
+//  LOADING STATE
+// ─────────────────────────────────────────────
+function showLoading(show) {
+  const overlay = document.getElementById('loadingOverlay');
+  if (show) overlay.classList.remove('hidden');
+  else overlay.classList.add('hidden');
+}
+
+// ─────────────────────────────────────────────
+//  DATA FETCHING
+// ─────────────────────────────────────────────
+async function loadAppData() {
+  showLoading(true);
+  try {
+    const { data, error } = await _supabase
+      .from('clients')
+      .select(`
+        *,
+        wedding_details(wedding_date),
+        contact_log(*)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    
+    // Process data to match previous structure expectations
+    clients = data.map(c => ({
+      ...c,
+      weddingDate: (Array.isArray(c.wedding_details) ? c.wedding_details[0] : c.wedding_details)?.wedding_date || null,
+      contactLog: (c.contact_log || []).sort((a,b) => new Date(b.log_date) - new Date(a.log_date))
+    }));
+
+    renderPipeline();
+    renderTypeFilters();
+    renderClientList();
+
+    // Auto-select first booked client
+    const first = clients.find(c => c.status === 'booked') || clients[0];
+    if (first) await selectClient(first.id);
+
+  } catch (err) {
+    console.error('Error loading data:', err);
+    alert('Failed to connect to Supabase. Check console for details.');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function fetchClientDeepDetails(clientId) {
+  showLoading(true);
+  try {
+    // 1. Fetch Client with full Wedding Details
+    const { data: client, error: cErr } = await _supabase
+      .from('clients')
+      .select('*, wedding_details(*)')
+      .eq('id', clientId)
+      .single();
+    if (cErr) throw cErr;
+
+    // 2. Fetch Contact Log with Action Items
+    const { data: logs, error: lErr } = await _supabase
+      .from('contact_log')
+      .select('*, action_items(*)')
+      .eq('client_id', clientId)
+      .order('log_date', { ascending: false });
+    if (lErr) throw lErr;
+
+    // 3. Fetch Vendors
+    const { data: vendors, error: vErr } = await _supabase
+      .from('vendors')
+      .select('*')
+      .eq('client_id', clientId);
+    if (vErr) throw vErr;
+
+    // 4. Fetch Timeline
+    const { data: timeline, error: tErr } = await _supabase
+      .from('timeline_events')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('sort_order', { ascending: true });
+    if (tErr) throw tErr;
+
+    // 5. Fetch Tasks
+    const { data: tasks } = await _supabase
+      .from('tasks')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('due_date', { ascending: true, nullsFirst: false });
+
+    // Assemble unified object
+    const wd = (Array.isArray(client.wedding_details) ? client.wedding_details[0] : client.wedding_details) || {};
+    activeClient = {
+      ...client,
+      weddingDate: wd.wedding_date,
+      contactLog: logs,
+      tasks: tasks || [],
+      weddingDetails: {
+        ceremony: { time: wd.ceremony_time, location: wd.ceremony_location, officiant: wd.ceremony_officiant, duration: wd.ceremony_duration, notes: wd.ceremony_notes, setup_time: wd.ceremony_setup_time, backup: wd.outdoor_backup_location },
+        cocktail: { time: wd.cocktail_time, location: wd.cocktail_location, notes: wd.cocktail_notes },
+        reception: { time: wd.reception_time, location: wd.reception_location, endTime: wd.reception_end_time, notes: wd.reception_notes },
+        rehearsal: { date: wd.rehearsal_date, time: wd.rehearsal_time, location: wd.rehearsal_location, dinner_location: wd.rehearsal_dinner_location, dinner_notes: wd.rehearsal_dinner_notes },
+        guests: { total: wd.guest_total, adults: wd.guest_adults, children: wd.guest_children, vendorMeals: wd.guest_vendor_meals },
+        dining: { style: wd.dining_style, entrees: wd.dining_entrees, apps: wd.dining_apps, dietary: wd.dining_dietary },
+        cake: { flavor: wd.cake_flavor, vendor: wd.cake_vendor, notes: wd.cake_notes },
+        bar: { package: wd.bar_package, hours: wd.bar_hours, notes: wd.bar_notes, signature: wd.bar_signature_cocktail },
+        music: { type: wd.music_type, ceremony_music: wd.ceremony_music, first_dance: wd.first_dance_song, parent_dances: wd.parent_dances, last_dance: wd.last_dance_song },
+        decor: { palette: wd.color_palette, style: wd.decor_style, notes: wd.decor_notes },
+        accommodations: { rooms: wd.accom_rooms, checkIn: wd.accom_checkin, checkOut: wd.accom_checkout, notes: wd.accom_notes },
+        contract: { signed: wd.contract_signed, deposit_amount: wd.deposit_amount, deposit_paid_date: wd.deposit_paid_date, balance_amount: wd.balance_due_amount, balance_date: wd.balance_due_date },
+        transport: wd.transport_notes,
+        special: wd.special_requests,
+        vendors: vendors,
+        timeline: timeline,
+        _raw: wd
+      }
+    };
+
+    renderDetail();
+  } catch (err) {
+    console.error('Error fetching details:', err);
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  RENDER PIPELINE BAR
+// ─────────────────────────────────────────────
+function renderPipeline() {
+  const counts = { inquiry:0, proposal:0, booked:0, complete:0, lost:0 };
+  clients.forEach(c => counts[c.status] = (counts[c.status]||0) + 1);
+  const stages = [
+    {key:'all', label:'All Clients', count: clients.length},
+    {key:'inquiry', label:'Inquiries', count: counts.inquiry},
+    {key:'proposal', label:'Proposals Out', count: counts.proposal},
+    {key:'booked', label:'Booked', count: counts.booked},
+    {key:'complete', label:'Complete', count: counts.complete},
+  ];
+  document.getElementById('pipelineBar').innerHTML = stages.map(s => `
+    <div class="pipe-stage${activeFilter===s.key?' active':''}" onclick="setFilter('${s.key}')">
+      <div class="pipe-count">${s.count}</div>
+      <div class="pipe-label">${s.label}</div>
+    </div>
+  `).join('');
+}
+
+function setFilter(f) {
+  activeFilter = f;
+  renderPipeline();
+  renderClientList();
+}
+
+// ─────────────────────────────────────────────
+//  EVENT TYPE FILTER PILLS
+// ─────────────────────────────────────────────
+function renderTypeFilters() {
+  const types = ['all','wedding','elopement','corporate','anniversary','family_reunion','other'];
+  const labels = {
+    all: 'All Types', wedding: '💍 Wedding', elopement: '🌿 Elopement',
+    corporate: '💼 Corporate', anniversary: '🥂 Anniversary',
+    family_reunion: '👨‍👩‍👧‍👦 Family', other: '✨ Other'
+  };
+  document.getElementById('filterPills').innerHTML = types.map(t => `
+    <div class="fpill${activeTypeFilter === t ? ' on' : ''}" onclick="setTypeFilter('${t}')">${labels[t]}</div>
+  `).join('');
+}
+
+function setTypeFilter(t) {
+  activeTypeFilter = t;
+  renderTypeFilters();
+  renderClientList();
+}
+
+// ─────────────────────────────────────────────
+//  RENDER SIDEBAR
+// ─────────────────────────────────────────────
+function renderClientList() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const filtered = clients.filter(c => {
+    const matchFilter = activeFilter === 'all' || c.status === activeFilter;
+    const matchType = activeTypeFilter === 'all' || (c.type || 'wedding') === activeTypeFilter;
+    const matchSearch = !search || c.name.toLowerCase().includes(search) || (c.email||'').toLowerCase().includes(search);
+    return matchFilter && matchType && matchSearch;
+  });
+
+  const sorted = [...filtered].sort((a,b) => {
+    if (a.status === 'complete' && b.status !== 'complete') return 1;
+    if (b.status === 'complete' && a.status !== 'complete') return -1;
+    if (!a.weddingDate) return 1;
+    if (!b.weddingDate) return -1;
+    return new Date(a.weddingDate) - new Date(b.weddingDate);
+  });
+
+  document.getElementById('clientList').innerHTML = sorted.length ? sorted.map(c => {
+    const overdue = c.next_action_date && new Date(c.next_action_date) < new Date() && c.status !== 'complete';
+    const lastLog = c.contactLog?.[0];
+    const lastContactStr = lastLog ? formatRelDate(lastLog.log_date) : 'No contact';
+    return `
+      <div class="cli${activeClient && c.id===activeClient.id ?' active':''}" onclick="selectClient('${c.id}')">
+        <div class="cli-name">${c.name}</div>
+        <div class="cli-date">💍 ${formatDate(c.weddingDate)}</div>
+        <div class="cli-row">
+          <span class="spill s-${c.status}">${statusLabel(c.status)}</span>
+          ${overdue ? '<span class="overdue-dot" title="Follow-up overdue"></span>' : ''}
+          <span class="cli-last">${lastContactStr}</span>
+        </div>
+      </div>
+    `;
+  }).join('') : '<div style="padding:20px;color:var(--muted);font-size:13px;text-align:center;">No clients found</div>';
+}
+
+function filterClients() { renderClientList(); }
+
+// ─────────────────────────────────────────────
+//  SELECT CLIENT
+// ─────────────────────────────────────────────
+async function selectClient(id) {
+  editingDetails = false;
+  pendingVendorDeletes = [];
+  pendingVendorAdds = [];
+  await fetchClientDeepDetails(id);
+  renderClientList();
+}
+
+function renderDetail() {
+  const c = activeClient;
+  if (!c) return;
+
+  document.getElementById('emptyState').style.display = 'none';
+  const cd = document.getElementById('clientDetail');
+  cd.style.display = 'flex';
+  cd.classList.remove('hidden');
+
+  // Header
+  const overdue = c.next_action_date && new Date(c.next_action_date) < new Date() && c.status !== 'complete';
+  let dtwStr = 'TBD';
+  if (c.weddingDate) {
+    const daysToWedding = Math.ceil((new Date(c.weddingDate) - new Date()) / 86400000);
+    dtwStr = daysToWedding > 0 ? `${daysToWedding} days away` : (daysToWedding === 0 ? 'Today!' : 'Past');
+  }
+
+  const naHtml = (c.next_action && c.status !== 'complete') ? `
+    <div class="na-bar ${overdue?'overdue':'due'}">
+      <div class="na-label">${overdue ? '⚠️ Overdue Action' : '📋 Next Action'}</div>
+      <div class="na-text">${c.next_action}</div>
+      <div class="na-date">${c.next_action_date ? 'Due: ' + formatDate(c.next_action_date) : ''}</div>
+    </div>` : '';
+
+  document.getElementById('detailHeader').innerHTML = `
+    <div class="dh-top">
+      <div class="dh-names">
+        <div class="dh-client-name">${c.name}</div>
+        <div class="dh-wedding-date">Wedding: ${formatDate(c.weddingDate)} &nbsp;·&nbsp; ${dtwStr}</div>
+      </div>
+      <div class="dh-actions">
+        <select id="statusChanger" onchange="changeStatus(this.value)" style="font-size:12px;padding:4px 10px;border-radius:20px;border:2px solid var(--border);font-weight:700;cursor:pointer;background:var(--surface);color:var(--text);">
+          <option value="inquiry"  ${c.status==='inquiry'  ?'selected':''}>🔍 Inquiry</option>
+          <option value="proposal" ${c.status==='proposal' ?'selected':''}>📄 Proposal Out</option>
+          <option value="booked"   ${c.status==='booked'   ?'selected':''}>✅ Booked</option>
+          <option value="complete" ${c.status==='complete' ?'selected':''}>🎉 Complete</option>
+          <option value="cancelled"${c.status==='cancelled'?'selected':''}>❌ Cancelled</option>
+        </select>
+        <button class="btn-ghost" onclick="openLogModal()">+ Log Interaction</button>
+      </div>
+    </div>
+    <div class="dh-stats">
+      <div class="stat"><div class="stat-v">${c.guest_count || 0}</div><div class="stat-l">Guests</div></div>
+      <div class="stat"><div class="stat-v">${c.contract_value ? '$'+c.contract_value.toLocaleString() : 'TBD'}</div><div class="stat-l">Contract Value</div></div>
+      <div class="stat"><div class="stat-v">${c.contactLog.length}</div><div class="stat-l">Interactions</div></div>
+      <div class="stat"><div class="stat-v">${c.assigned_to || 'Mae'}</div><div class="stat-l">Coordinator</div></div>
+    </div>
+    ${naHtml}
+    <div class="tabs">
+      ${['overview','log','tasks','details','dayof'].map(t => `
+        <div class="tab${activeTab===t?' active':''}" onclick="switchTab('${t}')">${tabLabel(t)}</div>
+      `).join('')}
+    </div>
+  `;
+
+  renderTabContent(c);
+}
+
+function switchTab(t) {
+  activeTab = t;
+  renderDetail();
+}
+
+function tabLabel(t) {
+  return {overview:'Overview', log:'Contact Log', tasks:'Tasks', details:'Event Details', dayof:'Day-of Plan'}[t];
+}
+
+// ─────────────────────────────────────────────
+//  TAB CONTENT
+// ─────────────────────────────────────────────
+function renderTabContent(c) {
+  const tc = document.getElementById('tabContent');
+  if (activeTab === 'overview') tc.innerHTML = renderOverview(c);
+  else if (activeTab === 'log') tc.innerHTML = renderLog(c);
+  else if (activeTab === 'tasks') tc.innerHTML = renderTasks(c);
+  else if (activeTab === 'details') tc.innerHTML = renderDetails(c);
+  else if (activeTab === 'dayof') tc.innerHTML = renderDayOf(c);
+}
+
+function renderOverview(c) {
+  const wd = c.weddingDetails;
+  const recentLogs = c.contactLog.slice(0, 3);
+  return `
+    <div class="ov-grid">
+      <div class="ov-card">
+        <div class="ov-card-title">Contact Info</div>
+        <div class="ov-row"><span class="ov-key">Email</span><span class="ov-val">${c.email}</span></div>
+        <div class="ov-row"><span class="ov-key">Phone</span><span class="ov-val">${c.phone}</span></div>
+        <div class="ov-row"><span class="ov-key">How they found us</span><span class="ov-val">${c.source}</span></div>
+        <div class="ov-row"><span class="ov-key">Created</span><span class="ov-val">${formatDate(c.created_at)}</span></div>
+      </div>
+      <div class="ov-card">
+        <div class="ov-card-title">Event Snapshot</div>
+        <div class="ov-row"><span class="ov-key">Wedding date</span><span class="ov-val">${formatDate(c.weddingDate)}</span></div>
+        <div class="ov-row"><span class="ov-key">Guest count</span><span class="ov-val">${c.guest_count}</span></div>
+        <div class="ov-row"><span class="ov-key">Ceremony</span><span class="ov-val">${wd.ceremony.location || 'TBD'} @ ${wd.ceremony.time || 'TBD'}</span></div>
+        <div class="ov-row"><span class="ov-key">Reception</span><span class="ov-val">${wd.reception.location || 'TBD'}</span></div>
+        <div class="ov-row"><span class="ov-key">Bar package</span><span class="ov-val">${wd.bar.package || 'TBD'}</span></div>
+        <div class="ov-row"><span class="ov-key">Rooms</span><span class="ov-val">${wd.accommodations.rooms || 'TBD'}</span></div>
+      </div>
+    </div>
+    <div class="ov-card" style="margin-bottom:14px;">
+      <div class="ov-card-title">Recent Activity</div>
+      ${recentLogs.length ? recentLogs.map(l => `
+        <div style="padding:8px 0;border-bottom:1px solid var(--forest-pale);font-size:13px;">
+          <span style="color:var(--muted);font-size:11px;">${formatDate(l.log_date)} · ${l.logged_by}</span>
+          <span class="etype et-${l.type}" style="margin:0 6px;">${etypeLabel(l.type)}</span><br/>
+          <span>${l.summary.substring(0,120)}${l.summary.length>120?'…':''}</span>
+        </div>
+      `).join('') : '<div style="color:var(--muted);font-size:13px;">No interactions logged yet.</div>'}
+      <div style="margin-top:10px;">
+        <button class="btn-ghost" style="font-size:12px;" onclick="switchTab('log')">View full contact log →</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderLog(c) {
+  const typeIcon = {email:'📧', call:'📞', meeting:'🤝', site:'🏕', note:'📝'};
+  return `
+    <div class="log-header">
+      <h3>Contact Log</h3>
+      <button class="btn-primary" onclick="openLogModal()">+ Log Interaction</button>
+    </div>
+    <div class="tl">
+      ${c.contactLog.length ? c.contactLog.map(l => `
+        <div class="entry">
+          <div class="entry-icon">${typeIcon[l.type]||'📝'}</div>
+          <div class="entry-body">
+            <div class="entry-meta">
+              <span class="etype et-${l.type}">${etypeLabel(l.type)}</span>
+              <span class="entry-by">${formatDate(l.log_date)} · ${l.logged_by}</span>
+            </div>
+            <div class="entry-notes">${l.summary}</div>
+            ${l.action_items && l.action_items.length ? `
+              <div class="action-list">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px;">Action Items</div>
+                ${l.action_items.map((a,i) => `
+                  <div class="action-item ${a.done?'done':''}" style="display:flex;align-items:center;gap:6px;">
+                    <input type="checkbox" ${a.done?'checked':''} onchange="toggleAction('${a.id}', this.checked)"/>
+                    <span style="flex:1;">${a.item_text}</span>
+                    ${!a.done ? `<button data-aid="${a.id}" data-atext="${(a.item_text||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}" onclick="promoteToTask(this.dataset.aid, this.dataset.atext)" title="Convert to Task" style="background:none;border:1px solid var(--border);border-radius:5px;font-size:10px;color:var(--muted);cursor:pointer;padding:1px 6px;white-space:nowrap;flex-shrink:0;">→ Task</button>` : ''}
+                  </div>
+                `).join('')}
+              </div>` : ''}
+          </div>
+        </div>
+      `).join('') : '<div style="color:var(--muted);font-size:14px;text-align:center;padding:40px;">No interactions logged yet.<br><br><button class="btn-primary" onclick="openLogModal()">Log First Interaction</button></div>'}
+    </div>
+  `;
+}
+
+function renderTasks(c) {
+  const tasks = c.tasks || [];
+  const pending = tasks.filter(t => t.status === 'pending');
+  const done    = tasks.filter(t => t.status === 'done');
+
+  const renderTask = (t) => {
+    const isOverdue = t.due_date && new Date(t.due_date+'T12:00:00') < new Date() && t.status === 'pending';
+    return `
+      <div class="task-item ${t.status==='done'?'done':''}">
+        <input type="checkbox" class="task-check" ${t.status==='done'?'checked':''} onchange="toggleTask('${t.id}', this.checked)"/>
+        <div style="flex:1;">
+          <div class="task-title">${t.title}</div>
+          ${t.description ? `<div class="task-desc">${t.description}</div>` : ''}
+          <div class="task-due ${isOverdue?'overdue':''}">
+            ${t.due_date ? (isOverdue ? '⚠️ Overdue · ' : '📅 ') + formatDate(t.due_date) : '<span style="color:var(--muted)">No due date</span>'}
+            ${t.assigned_to ? ' · 👤 ' + t.assigned_to : ''}
+            ${t.status === 'done' && t.completed_by && t.completed_by !== t.assigned_to ? `<span style="color:var(--muted);"> · completed by ${t.completed_by}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+  };
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <h3 style="font-size:15px;font-weight:700;">Tasks
+        ${pending.length > 0 ? `<span style="font-size:13px;font-weight:400;color:var(--muted);margin-left:6px;">${pending.length} open</span>` : ''}
+      </h3>
+      <button class="btn-primary" onclick="openNewTaskModal()">+ Add Task</button>
+    </div>
+    ${tasks.length === 0 ? `
+      <div style="text-align:center;padding:48px;color:var(--muted);font-size:14px;">
+        No tasks yet — add one to start tracking planning steps.<br><br>
+        <button class="btn-primary" onclick="openNewTaskModal()">+ Add First Task</button>
+      </div>
+    ` : ''}
+    ${pending.length > 0 ? `
+      <div class="task-section">
+        <div class="task-section-hdr">Open Tasks</div>
+        ${pending.map(renderTask).join('')}
+      </div>
+    ` : ''}
+    ${done.length > 0 ? `
+      <div class="task-section">
+        <div class="task-section-hdr">Completed</div>
+        ${done.map(renderTask).join('')}
+      </div>
+    ` : ''}
+  `;
+}
+
+function renderDetails(c) {
+  if (editingDetails) return renderDetailsEditForm(c);
+
+  const wd = c.weddingDetails;
+  const row = (k, v) => v ? `<div class="wd-row"><span class="wd-k">${k}</span><span class="wd-v">${v}</span></div>` : '';
+  const card = (title, ...rows) => {
+    const content = rows.join('');
+    if (!content) return '';
+    return `<div class="wd-card"><div class="wd-title">${title}</div>${content}</div>`;
+  };
+  const fullCard = (title, ...rows) => {
+    const content = rows.join('');
+    if (!content) return '';
+    return `<div class="wd-card full"><div class="wd-title">${title}</div>${content}</div>`;
+  };
+
+  const hasCeremony   = Object.values(wd.ceremony).some(Boolean);
+  const hasCocktail   = Object.values(wd.cocktail).some(Boolean);
+  const hasReception  = Object.values(wd.reception).some(Boolean);
+  const hasRehearsal  = Object.values(wd.rehearsal).some(Boolean);
+  const hasGuests     = Object.values(wd.guests).some(v => v);
+  const hasDining     = Object.values(wd.dining).some(Boolean);
+  const hasCake       = Object.values(wd.cake).some(Boolean);
+  const hasBar        = Object.values(wd.bar).some(Boolean);
+  const hasMusic      = Object.values(wd.music).some(Boolean);
+  const hasDecor      = Object.values(wd.decor).some(Boolean);
+  const hasAccom      = Object.values(wd.accommodations).some(Boolean);
+  const hasContract   = wd.contract.signed || Object.values(wd.contract).some(v => v && v !== false);
+  const hasSpecial    = wd.special || wd.transport;
+  const hasVendors    = wd.vendors && wd.vendors.length > 0;
+  const isEmpty       = ![hasCeremony,hasCocktail,hasReception,hasRehearsal,hasGuests,hasDining,hasCake,hasBar,hasMusic,hasDecor,hasAccom,hasContract,hasSpecial,hasVendors].some(Boolean);
+
+  return `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+      <button class="btn-ghost" onclick="startEditDetails()">✏️ Edit Details</button>
+    </div>
+    ${isEmpty ? `
+      <div style="text-align:center;padding:48px;color:var(--muted);font-size:14px;">
+        No event details filled in yet.<br><br>
+        <button class="btn-primary" onclick="startEditDetails()">✏️ Add Details</button>
+      </div>
+    ` : ''}
+    <div class="wd-grid">
+      ${hasCeremony ? card('⛪ Ceremony',
+        row('Time', wd.ceremony.time), row('Location', wd.ceremony.location),
+        row('Officiant', wd.ceremony.officiant), row('Duration', wd.ceremony.duration),
+        row('Setup Time', wd.ceremony.setup_time), row('Outdoor Backup', wd.ceremony.backup),
+        row('Notes', wd.ceremony.notes)
+      ) : ''}
+      ${hasCocktail ? card('🥂 Cocktail Hour',
+        row('Time', wd.cocktail.time), row('Location', wd.cocktail.location),
+        row('Notes', wd.cocktail.notes)
+      ) : ''}
+      ${hasReception ? card('🎉 Reception',
+        row('Start Time', wd.reception.time), row('End Time', wd.reception.endTime),
+        row('Location', wd.reception.location), row('Notes', wd.reception.notes)
+      ) : ''}
+      ${hasRehearsal ? card('📅 Rehearsal',
+        row('Date', formatDate(wd.rehearsal.date)), row('Time', wd.rehearsal.time),
+        row('Location', wd.rehearsal.location),
+        row('Dinner At', wd.rehearsal.dinner_location), row('Dinner Notes', wd.rehearsal.dinner_notes)
+      ) : ''}
+      ${hasGuests ? card('👥 Guest Counts',
+        row('Total', wd.guests.total), row('Adults', wd.guests.adults),
+        row('Children', wd.guests.children), row('Vendor Meals', wd.guests.vendorMeals)
+      ) : ''}
+      ${hasDining ? card('🍽 Dining',
+        row('Style', wd.dining.style), row('Entrées', wd.dining.entrees),
+        row('Appetizers', wd.dining.apps), row('Dietary Notes', wd.dining.dietary)
+      ) : ''}
+      ${hasCake ? card('🎂 Cake & Dessert',
+        row('Flavor', wd.cake.flavor), row('Vendor', wd.cake.vendor), row('Notes', wd.cake.notes)
+      ) : ''}
+      ${hasBar ? card('🍻 Bar Package',
+        row('Package', wd.bar.package), row('Hours', wd.bar.hours),
+        row('Signature Cocktail', wd.bar.signature), row('Notes', wd.bar.notes)
+      ) : ''}
+      ${hasMusic ? card('🎵 Music & Entertainment',
+        row('Type', wd.music.type), row('Ceremony Music', wd.music.ceremony_music),
+        row('First Dance', wd.music.first_dance), row('Parent Dances', wd.music.parent_dances),
+        row('Last Dance', wd.music.last_dance)
+      ) : ''}
+      ${hasDecor ? card('🌸 Decor & Style',
+        row('Color Palette', wd.decor.palette), row('Style / Theme', wd.decor.style),
+        row('Notes', wd.decor.notes)
+      ) : ''}
+      ${hasAccom ? card('🏡 Accommodations',
+        row('Cabin Block', wd.accommodations.rooms),
+        row('Check-in', formatDate(wd.accommodations.checkIn)),
+        row('Check-out', formatDate(wd.accommodations.checkOut)),
+        row('Notes', wd.accommodations.notes)
+      ) : ''}
+      ${hasContract ? card('📝 Contract & Payments',
+        row('Contract', wd.contract.signed ? '✅ Signed' : '⏳ Pending'),
+        row('Deposit', wd.contract.deposit_amount ? '$' + Number(wd.contract.deposit_amount).toLocaleString() : null),
+        row('Deposit Paid', formatDate(wd.contract.deposit_paid_date)),
+        row('Balance Due', wd.contract.balance_amount ? '$' + Number(wd.contract.balance_amount).toLocaleString() : null),
+        row('Balance Date', formatDate(wd.contract.balance_date))
+      ) : ''}
+      ${hasSpecial ? fullCard('✨ Special Requests & Notes',
+        row('Transportation', wd.transport), row('Special Requests', wd.special)
+      ) : ''}
+    </div>
+    ${hasVendors ? `
+      <div class="wd-card full" style="margin-top:14px;">
+        <div class="wd-title">🤝 Vendors</div>
+        ${wd.vendors.map(v => `
+          <div class="vendor-row">
+            <span class="vendor-type">${v.vendor_type||'—'}</span>
+            <span>${v.name||''}${v.contact ? ' · ' + v.contact : ''}${v.notes ? ' · ' + v.notes : ''}</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+  `;
+}
+
+// ─────────────────────────────────────────────
+//  DETAILS EDIT FORM
+// ─────────────────────────────────────────────
+function startEditDetails() {
+  editingDetails = true;
+  pendingVendorDeletes = [];
+  pendingVendorAdds = [];
+  renderTabContent(activeClient);
+}
+function cancelEditDetails() {
+  editingDetails = false;
+  pendingVendorDeletes = [];
+  pendingVendorAdds = [];
+  renderTabContent(activeClient);
+}
+
+function renderDetailsEditForm(c) {
+  const raw = c.weddingDetails._raw || {};
+  const wdate = c.weddingDate || '';
+  const vendors = (c.weddingDetails.vendors || []).filter(v => !pendingVendorDeletes.includes(v.id));
+
+  const F = (label, id, type, val, ph='') => `
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:11px;font-weight:600;margin-bottom:4px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">${label}</label>
+      <input id="${id}" type="${type||'text'}" value="${(val==null?'':String(val)).replace(/"/g,'&quot;')}" placeholder="${ph}"
+        style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;"/>
+    </div>`;
+  const S = (label, id, opts, val) => `
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:11px;font-weight:600;margin-bottom:4px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">${label}</label>
+      <select id="${id}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;">
+        <option value="">— not set —</option>
+        ${opts.map(([v,l])=>`<option value="${v}"${val===v?' selected':''}>${l}</option>`).join('')}
+      </select>
+    </div>`;
+  const T = (label, id, val, ph='') => `
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:11px;font-weight:600;margin-bottom:4px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">${label}</label>
+      <textarea id="${id}" placeholder="${ph}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;resize:vertical;min-height:64px;">${val||''}</textarea>
+    </div>`;
+  const row2 = (...items) => `<div style="display:grid;grid-template-columns:${items.map(()=>'1fr').join(' ')};gap:12px;">${items.join('')}</div>`;
+  const sec = (icon, title, body) => `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:18px;margin-bottom:14px;">
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--forest);padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:14px;">${icon} ${title}</div>
+      ${body}
+    </div>`;
+
+  const vendorRows = vendors.map(v => `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center;">
+      <input placeholder="Type (Photographer…)" value="${(v.vendor_type||'').replace(/"/g,'&quot;')}"
+        onchange="liveUpdateVendor('${v.id}','vendor_type',this.value)"
+        style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;"/>
+      <input placeholder="Name / Company" value="${(v.name||'').replace(/"/g,'&quot;')}"
+        onchange="liveUpdateVendor('${v.id}','name',this.value)"
+        style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;"/>
+      <input placeholder="Phone / Email" value="${(v.contact||'').replace(/"/g,'&quot;')}"
+        onchange="liveUpdateVendor('${v.id}','contact',this.value)"
+        style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;"/>
+      <button onclick="markVendorDelete('${v.id}')" style="padding:7px 10px;background:#fee2e2;color:var(--red);border:none;border-radius:6px;cursor:pointer;font-size:13px;">✕</button>
+    </div>`).join('');
+
+  const newVendorRows = pendingVendorAdds.map((v,i) => `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center;" id="new-vendor-${i}">
+      <input placeholder="Type (Photographer…)" oninput="pendingVendorAdds[${i}].vendor_type=this.value"
+        style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fffef0;"/>
+      <input placeholder="Name / Company" oninput="pendingVendorAdds[${i}].name=this.value"
+        style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fffef0;"/>
+      <input placeholder="Phone / Email" oninput="pendingVendorAdds[${i}].contact=this.value"
+        style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fffef0;"/>
+      <button onclick="pendingVendorAdds.splice(${i},1);renderTabContent(activeClient)" style="padding:7px 10px;background:#fee2e2;color:var(--red);border:none;border-radius:6px;cursor:pointer;font-size:13px;">✕</button>
+    </div>`).join('');
+
+  return `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px;gap:8px;">
+      <button class="btn-ghost" onclick="cancelEditDetails()">Cancel</button>
+      <button class="btn-primary" onclick="saveWeddingDetails()">💾 Save Details</button>
+    </div>
+
+    ${sec('⛪','Ceremony',
+      row2(F('Date','wd-wdate','date',wdate), F('Time','wd-ceremony-time','text',raw.ceremony_time,'4:00 PM')) +
+      row2(F('Location','wd-ceremony-location','text',raw.ceremony_location,'Outdoor Lakeside Ceremony Area'), F('Duration','wd-ceremony-duration','text',raw.ceremony_duration,'30 minutes')) +
+      row2(F('Officiant','wd-ceremony-officiant','text',raw.ceremony_officiant), F('Setup / Access Time','wd-ceremony-setup','text',raw.ceremony_setup_time,'2:00 PM')) +
+      F('Outdoor Backup Location','wd-backup-location','text',raw.outdoor_backup_location,'Northern Lights Lodge interior') +
+      T('Ceremony Notes','wd-ceremony-notes',raw.ceremony_notes)
+    )}
+
+    ${sec('🥂','Cocktail Hour',
+      row2(F('Time','wd-cocktail-time','text',raw.cocktail_time,'5:00 PM'), F('Location','wd-cocktail-location','text',raw.cocktail_location,'Outdoor Deck')) +
+      T('Notes','wd-cocktail-notes',raw.cocktail_notes)
+    )}
+
+    ${sec('🎉','Reception',
+      row2(F('Start Time','wd-reception-time','text',raw.reception_time,'6:00 PM'), F('End Time','wd-reception-end','text',raw.reception_end_time,'10:00 PM')) +
+      F('Location','wd-reception-location','text',raw.reception_location,'Northern Lights Lodge') +
+      T('Notes','wd-reception-notes',raw.reception_notes)
+    )}
+
+    ${sec('📅','Rehearsal & Rehearsal Dinner',
+      row2(F('Rehearsal Date','wd-rehearsal-date','date',raw.rehearsal_date), F('Rehearsal Time','wd-rehearsal-time','text',raw.rehearsal_time,'4:00 PM')) +
+      F('Rehearsal Location','wd-rehearsal-location','text',raw.rehearsal_location) +
+      row2(F('Rehearsal Dinner Location','wd-rehearsal-dinner-loc','text',raw.rehearsal_dinner_location,"Justine's Restaurant"), T('Dinner Notes','wd-rehearsal-dinner-notes',raw.rehearsal_dinner_notes))
+    )}
+
+    ${sec('🎵','Music & Entertainment',
+      S('Entertainment Type','wd-music-type',[['DJ','DJ'],['Live Band','Live Band'],['Acoustic','Acoustic / Solo Artist'],['Playlist','Playlist / Spotify'],['Other','Other']],raw.music_type) +
+      row2(F('Ceremony Music','wd-ceremony-music','text',raw.ceremony_music,'e.g. Canon in D'), F('First Dance Song','wd-first-dance','text',raw.first_dance_song)) +
+      row2(F('Parent Dances','wd-parent-dances','text',raw.parent_dances,'Father/daughter, mother/son…'), F('Last Dance Song','wd-last-dance','text',raw.last_dance_song))
+    )}
+
+    ${sec('👥','Guest Counts',
+      `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+        ${F('Total Guests','wd-guests-total','number',raw.guest_total)}
+        ${F('Adults','wd-guests-adults','number',raw.guest_adults)}
+        ${F('Children','wd-guests-children','number',raw.guest_children)}
+        ${F('Vendor Meals','wd-guests-vendors','number',raw.guest_vendor_meals)}
+      </div>`
+    )}
+
+    ${sec('🍽','Dining',
+      S('Service Style','wd-dining-style',[['Plated','Plated / Formal'],['Buffet','Buffet'],['Family Style','Family Style'],['Stations','Food Stations'],['Cocktail','Cocktail Reception']],raw.dining_style) +
+      T('Entrée Options','wd-dining-entrees',raw.dining_entrees,'e.g. Walleye, Beef Tenderloin, Vegetarian') +
+      row2(T('Appetizers','wd-dining-apps',raw.dining_apps), T('Dietary Restrictions','wd-dining-dietary',raw.dining_dietary,'Gluten-free, nut allergy…'))
+    )}
+
+    ${sec('🎂','Cake & Dessert',
+      row2(F('Cake Flavor','wd-cake-flavor','text',raw.cake_flavor,'e.g. Lemon raspberry'), F('Cake Vendor','wd-cake-vendor','text',raw.cake_vendor)) +
+      T('Cake Notes','wd-cake-notes',raw.cake_notes,'Design details, delivery, cutting service…')
+    )}
+
+    ${sec('🍻','Bar Package',
+      S('Package','wd-bar-package',[['Full Open Bar','Full Open Bar'],['Beer & Wine','Beer & Wine Only'],['Beer Only','Beer Only'],['Cash Bar','Cash Bar'],['None','No Bar Service']],raw.bar_package) +
+      row2(F('Bar Hours','wd-bar-hours','text',raw.bar_hours,'6:00–10:00 PM'), F('Signature Cocktail','wd-bar-signature','text',raw.bar_signature_cocktail,'e.g. Northwoods Mule')) +
+      T('Bar Notes','wd-bar-notes',raw.bar_notes)
+    )}
+
+    ${sec('🌸','Decor & Style',
+      row2(F('Color Palette','wd-color-palette','text',raw.color_palette,'e.g. Sage, ivory, gold'), F('Style / Theme','wd-decor-style','text',raw.decor_style,'e.g. Rustic woodland, modern farmhouse')) +
+      T('Decor Notes','wd-decor-notes',raw.decor_notes,'Centerpiece details, lighting, florals…')
+    )}
+
+    ${sec('🏡','Accommodations',
+      row2(F('Check-in Date','wd-accom-checkin','date',raw.accom_checkin), F('Check-out Date','wd-accom-checkout','date',raw.accom_checkout)) +
+      F('Cabin Block / Rooms','wd-accom-rooms','text',raw.accom_rooms,'e.g. Cabins 1, 3, 12 + 4 lodge rooms') +
+      T('Accommodation Notes','wd-accom-notes',raw.accom_notes)
+    )}
+
+    ${sec('📝','Contract & Payments',
+      `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <input type="checkbox" id="wd-contract-signed" ${raw.contract_signed?'checked':''} style="width:16px;height:16px;accent-color:var(--forest);cursor:pointer;"/>
+        <label for="wd-contract-signed" style="font-size:13px;font-weight:600;cursor:pointer;">Contract Signed</label>
+      </div>` +
+      row2(F('Deposit Amount','wd-deposit-amount','number',raw.deposit_amount,'e.g. 1000'), F('Deposit Paid Date','wd-deposit-paid','date',raw.deposit_paid_date)) +
+      row2(F('Balance Due Amount','wd-balance-amount','number',raw.balance_due_amount), F('Balance Due Date','wd-balance-date','date',raw.balance_due_date))
+    )}
+
+    ${sec('✨','Special Requests & Notes',
+      T('Transportation Notes','wd-transport-notes',raw.transport_notes,'Guest shuttle, parking directions, shuttle from Grand Marais…') +
+      T('Special Requests','wd-special-requests',raw.special_requests,'Sparkler exit, bonfire, surprise moments, accessibility needs…')
+    )}
+
+    ${sec('🤝','Vendors',
+      `<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);padding:0 4px;">TYPE</div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);padding:0 4px;">NAME</div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);padding:0 4px;">CONTACT</div>
+        <div></div>
+      </div>
+      <div id="vendor-edit-list">${vendorRows}${newVendorRows}</div>
+      <button onclick="addVendorRowInline()" class="btn-ghost" style="font-size:12px;margin-top:4px;">+ Add Vendor</button>`
+    )}
+
+    <div style="display:flex;justify-content:flex-end;margin-top:4px;gap:8px;padding-bottom:32px;">
+      <button class="btn-ghost" onclick="cancelEditDetails()">Cancel</button>
+      <button class="btn-primary" onclick="saveWeddingDetails()">💾 Save Details</button>
+    </div>
+  `;
+}
+
+async function saveWeddingDetails() {
+  const c = activeClient;
+  if (!c) return;
+  showLoading(true);
+  try {
+    const g  = id => (document.getElementById(id)?.value || '').trim() || null;
+    const gn = id => { const v = document.getElementById(id)?.value; return (v !== '' && v != null) ? parseFloat(v) : null; };
+    const gb = id => document.getElementById(id)?.checked || false;
+
+    const updateData = {
+      wedding_date: g('wd-wdate'),
+      ceremony_time: g('wd-ceremony-time'), ceremony_location: g('wd-ceremony-location'),
+      ceremony_duration: g('wd-ceremony-duration'), ceremony_officiant: g('wd-ceremony-officiant'),
+      ceremony_setup_time: g('wd-ceremony-setup'), outdoor_backup_location: g('wd-backup-location'),
+      ceremony_notes: g('wd-ceremony-notes'),
+      cocktail_time: g('wd-cocktail-time'), cocktail_location: g('wd-cocktail-location'), cocktail_notes: g('wd-cocktail-notes'),
+      reception_time: g('wd-reception-time'), reception_end_time: g('wd-reception-end'),
+      reception_location: g('wd-reception-location'), reception_notes: g('wd-reception-notes'),
+      rehearsal_date: g('wd-rehearsal-date'), rehearsal_time: g('wd-rehearsal-time'),
+      rehearsal_location: g('wd-rehearsal-location'),
+      rehearsal_dinner_location: g('wd-rehearsal-dinner-loc'), rehearsal_dinner_notes: g('wd-rehearsal-dinner-notes'),
+      music_type: g('wd-music-type'), ceremony_music: g('wd-ceremony-music'),
+      first_dance_song: g('wd-first-dance'), parent_dances: g('wd-parent-dances'), last_dance_song: g('wd-last-dance'),
+      guest_total: gn('wd-guests-total'), guest_adults: gn('wd-guests-adults'),
+      guest_children: gn('wd-guests-children'), guest_vendor_meals: gn('wd-guests-vendors'),
+      dining_style: g('wd-dining-style'), dining_entrees: g('wd-dining-entrees'),
+      dining_apps: g('wd-dining-apps'), dining_dietary: g('wd-dining-dietary'),
+      cake_flavor: g('wd-cake-flavor'), cake_vendor: g('wd-cake-vendor'), cake_notes: g('wd-cake-notes'),
+      bar_package: g('wd-bar-package'), bar_hours: g('wd-bar-hours'),
+      bar_signature_cocktail: g('wd-bar-signature'), bar_notes: g('wd-bar-notes'),
+      color_palette: g('wd-color-palette'), decor_style: g('wd-decor-style'), decor_notes: g('wd-decor-notes'),
+      accom_checkin: g('wd-accom-checkin'), accom_checkout: g('wd-accom-checkout'),
+      accom_rooms: g('wd-accom-rooms'), accom_notes: g('wd-accom-notes'),
+      contract_signed: gb('wd-contract-signed'),
+      deposit_amount: gn('wd-deposit-amount'), deposit_paid_date: g('wd-deposit-paid'),
+      balance_due_amount: gn('wd-balance-amount'), balance_due_date: g('wd-balance-date'),
+      transport_notes: g('wd-transport-notes'), special_requests: g('wd-special-requests')
+    };
+
+    const { error: wErr } = await _supabase.from('wedding_details').update(updateData).eq('client_id', c.id);
+    if (wErr) throw wErr;
+
+    // Sync wedding date on client record too
+    if (updateData.wedding_date) {
+      await _supabase.from('clients').update({ /* date stored in wedding_details */ }).eq('id', c.id);
+    }
+
+    // Delete removed vendors
+    for (const vid of pendingVendorDeletes) {
+      await _supabase.from('vendors').delete().eq('id', vid);
+    }
+
+    // Insert new vendors
+    const toAdd = pendingVendorAdds.filter(v => v.name || v.vendor_type);
+    if (toAdd.length > 0) {
+      await _supabase.from('vendors').insert(toAdd.map(v => ({ ...v, client_id: c.id })));
+    }
+
+    editingDetails = false;
+    pendingVendorDeletes = [];
+    pendingVendorAdds = [];
+    await selectClient(c.id);
+    activeTab = 'details';
+    renderDetail();
+  } catch (err) {
+    console.error('Error saving details:', err);
+    alert('Error saving: ' + err.message);
+  } finally {
+    showLoading(false);
+  }
+}
+
+function markVendorDelete(id) {
+  pendingVendorDeletes.push(id);
+  renderTabContent(activeClient);
+}
+
+function addVendorRowInline() {
+  pendingVendorAdds.push({ vendor_type: '', name: '', contact: '' });
+  renderTabContent(activeClient);
+}
+
+function liveUpdateVendor(id, field, value) {
+  if (!activeClient) return;
+  const v = activeClient.weddingDetails.vendors.find(v => v.id === id);
+  if (v) v[field] = value;
+}
+
+function renderDayOf(c) {
+  const wd = c.weddingDetails;
+  if (!wd.timeline || wd.timeline.length === 0) {
+    return `<div style="color:var(--muted);font-size:14px;text-align:center;padding:40px;">No day-of timeline built yet.<br><small>Add entries to the Wedding Details to populate this plan.</small></div>`;
+  }
+  return `
+    <div class="dop-header">
+      <h3>Day-of Operations Plan — ${formatDate(c.weddingDate)}</h3>
+      <button class="btn-ghost" onclick="window.print()">🖨 Print</button>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:16px;margin-bottom:16px;font-size:13px;">
+      <strong>Coordinator:</strong> ${c.assigned_to} &nbsp;·&nbsp;
+      <strong>Guest Count:</strong> ${c.guest_count} &nbsp;·&nbsp;
+      <strong>Ceremony:</strong> ${wd.ceremony.location} @ ${wd.ceremony.time} &nbsp;·&nbsp;
+      <strong>Reception:</strong> ${wd.reception.location}
+    </div>
+    <div class="tl">
+      ${wd.timeline.map(t => `
+        <div class="tl-item">
+          <div class="tl-time">${t.event_time}</div>
+          <div class="tl-dot-wrap"><div class="tl-dot"></div><div class="tl-line"></div></div>
+          <div class="tl-body">
+            <div class="tl-event">${t.event_name}</div>
+            <div class="tl-detail">${[t.location, t.staff].filter(Boolean).join(' · ')}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ${wd.vendors && wd.vendors.length ? `
+      <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:16px;margin-top:16px;">
+        <div class="wd-title" style="margin-bottom:12px;">Vendor Contacts</div>
+        ${wd.vendors.map(v => `
+          <div class="vendor-row">
+            <span class="vendor-type">${v.vendor_type}</span>
+            <span>${v.name}${v.contact ? ' · ' + v.contact : ''}</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+    ${wd.dining ? `
+      <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:16px;margin-top:16px;">
+        <div class="wd-title" style="margin-bottom:12px;">Dining Summary</div>
+        <div class="vendor-row"><span class="vendor-type">Style</span><span>${wd.dining.style}</span></div>
+
+        <div class="vendor-row"><span class="vendor-type">Entrées</span><span>${wd.dining.entrees}</span></div>
+        ${wd.dining.dietary ? `<div class="vendor-row"><span class="vendor-type">Dietary</span><span style="color:var(--red);font-weight:600;">${wd.dining.dietary}</span></div>` : ''}
+      </div>
+    ` : ''}
+  `;
+}
+
+// ─────────────────────────────────────────────
+//  MODALS
+// ─────────────────────────────────────────────
+function openNewClientModal() {
+  document.getElementById('newClientModal').classList.remove('hidden');
+  document.getElementById('nc-wdate').value = '';
+  document.getElementById('nc-type').value = 'wedding';
+}
+
+function openNewTaskModal() {
+  if (!activeClient) return;
+  document.getElementById('newTaskModal').classList.remove('hidden');
+  document.getElementById('nt-title').value = '';
+  document.getElementById('nt-desc').value = '';
+  // Default assigned_to to current user
+  const sel = document.getElementById('nt-assigned');
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === currentUserName) { sel.selectedIndex = i; break; }
+  }
+  // Default due date: 7 days from now
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  document.getElementById('nt-due').value = d.toISOString().split('T')[0];
+}
+function openLogModal() {
+  document.getElementById('logContactModal').classList.remove('hidden');
+  document.getElementById('lc-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('lc-notes').value = '';
+  document.getElementById('lc-actions').value = '';
+  document.getElementById('lc-nextaction').value = '';
+  document.getElementById('lc-nextdate').value = '';
+}
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+async function changeStatus(newStatus) {
+  if (!activeClient) return;
+  const oldStatus = activeClient.status;
+  if (newStatus === oldStatus) return;
+  const { error } = await _supabase
+    .from('clients')
+    .update({ status: newStatus })
+    .eq('id', activeClient.id);
+  if (error) { alert('Error updating status: ' + error.message); document.getElementById('statusChanger').value = oldStatus; return; }
+  activeClient.status = newStatus;
+  // Update the list item badge without full reload
+  const idx = clients.findIndex(c => c.id === activeClient.id);
+  if (idx !== -1) clients[idx].status = newStatus;
+  renderClientList();
+  renderDetail();
+  console.log(`Status changed: ${activeClient.name} → ${newStatus}`);
+}
+
+async function saveNewClient() {
+  const p1 = document.getElementById('nc-p1').value.trim();
+  const p2 = document.getElementById('nc-p2').value.trim();
+  if (!p1) return alert('Enter at least one partner name.');
+  
+  showLoading(true);
+  try {
+    const clientData = {
+      name: p2 ? `${p1} & ${p2}` : p1,
+      type: document.getElementById('nc-type').value || 'wedding',
+      status: document.getElementById('nc-status').value,
+      email: document.getElementById('nc-email').value,
+      phone: document.getElementById('nc-phone').value,
+      source: document.getElementById('nc-source').value,
+      assigned_to: document.getElementById('nc-coord').value,
+      guest_count: parseInt(document.getElementById('nc-guests').value) || 0,
+      next_action: 'Send initial follow-up'
+    };
+
+    // 1. Insert Client
+    const { data: newClient, error: cErr } = await _supabase
+      .from('clients')
+      .insert(clientData)
+      .select()
+      .single();
+    if (cErr) throw cErr;
+
+    // 2. Insert Empty Wedding Details
+    const { error: wErr } = await _supabase
+      .from('wedding_details')
+      .insert({
+        client_id: newClient.id,
+        wedding_date: document.getElementById('nc-wdate').value || null
+      });
+    if (wErr) throw wErr;
+
+    const initNote = document.getElementById('nc-notes').value.trim();
+    if (initNote) {
+      await _supabase.from('contact_log').insert({
+        client_id: newClient.id,
+        log_date: new Date().toISOString().split('T')[0],
+        type: 'note',
+        summary: initNote,
+        logged_by: newClient.assigned_to
+      });
+    }
+
+    closeModal('newClientModal');
+    await loadAppData(); // Reload everything
+    await selectClient(newClient.id);
+
+  } catch (err) {
+    console.error('Error saving client:', err);
+    alert('Error saving client.');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function saveContactLog() {
+  const summary = document.getElementById('lc-notes').value.trim();
+  if (!summary) return alert('Please add notes for this interaction.');
+  const c = activeClient;
+  if (!c) return;
+
+  showLoading(true);
+  try {
+    const logDate = document.getElementById('lc-date').value;
+    const type = document.getElementById('lc-type').value;
+    const nextAction = document.getElementById('lc-nextaction').value.trim();
+    const nextDate = document.getElementById('lc-nextdate').value;
+    const loggedBy = document.getElementById('lc-by').value;
+
+    // 1. Insert Log Entry
+    const { data: logEntry, error: lErr } = await _supabase
+      .from('contact_log')
+      .insert({
+        client_id: c.id,
+        log_date: logDate || null,
+        type: type,
+        summary: summary,
+        logged_by: loggedBy,
+        next_action: nextAction || null,
+        next_action_date: nextDate || null
+      })
+      .select()
+      .single();
+    if (lErr) throw lErr;
+
+    // 2. Insert Action Items
+    const actionsRaw = document.getElementById('lc-actions').value.trim();
+    if (actionsRaw) {
+      const actions = actionsRaw.split('\n').filter(Boolean).map(t => ({
+        log_id: logEntry.id,
+        item_text: t.trim(),
+        done: false
+      }));
+      const { error: aErr } = await _supabase.from('action_items').insert(actions);
+      if (aErr) throw aErr;
+    }
+
+    // 3. Update Client's next action
+    const updateData = {};
+    if (nextAction) updateData.next_action = nextAction;
+    if (nextDate) updateData.next_action_date = nextDate;
+
+    // Auto follow-up for email interactions: if no next date set, default to 3 days out
+    let autoFollowUp = false;
+    if (type === 'email' && !nextDate) {
+      const followUp = new Date();
+      followUp.setDate(followUp.getDate() + 3);
+      updateData.next_action = nextAction || 'Follow up on email sent';
+      updateData.next_action_date = followUp.toISOString().split('T')[0];
+      autoFollowUp = true;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await _supabase.from('clients').update(updateData).eq('id', c.id);
+    }
+
+    closeModal('logContactModal');
+    await loadAppData();
+    await selectClient(c.id);
+
+    // Show Mae draft for email interactions
+    if (type === 'email') {
+      showMaeDraft(c, summary, autoFollowUp);
+    }
+
+  } catch (err) {
+    console.error('Error saving log:', err);
+    alert('Error saving interaction.');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function toggleAction(actionId, done) {
+  try {
+    await _supabase.from('action_items').update({ done }).eq('id', actionId);
+    // Silent update to local state for immediate feedback
+    if (activeClient) {
+      activeClient.contactLog.forEach(l => {
+        if (l.action_items) {
+          const item = l.action_items.find(ai => ai.id === actionId);
+          if (item) item.done = done;
+        }
+      });
+      renderDetail();
+    }
+  } catch (err) {
+    console.error('Error toggling action:', err);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  TASKS
+// ─────────────────────────────────────────────
+async function saveNewTask() {
+  const title = document.getElementById('nt-title').value.trim();
+  if (!title) return alert('Please enter a task title.');
+  const c = activeClient;
+  if (!c) return;
+
+  showLoading(true);
+  try {
+    const { error } = await _supabase.from('tasks').insert({
+      client_id: c.id,
+      title,
+      description: document.getElementById('nt-desc').value.trim() || null,
+      due_date: document.getElementById('nt-due').value || null,
+      assigned_to: document.getElementById('nt-assigned').value,
+      status: 'pending'
+    });
+    if (error) throw error;
+    closeModal('newTaskModal');
+    await selectClient(c.id);
+    activeTab = 'tasks';
+    renderDetail();
+  } catch (err) {
+    console.error('Error saving task:', err);
+    alert('Error saving task.');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function toggleTask(taskId, done) {
+  try {
+    await _supabase.from('tasks').update({
+      status: done ? 'done' : 'pending',
+      completed_at: done ? new Date().toISOString() : null,
+      completed_by: done ? currentUserName : null
+    }).eq('id', taskId);
+    if (activeClient && activeClient.tasks) {
+      const t = activeClient.tasks.find(t => t.id === taskId);
+      if (t) { t.status = done ? 'done' : 'pending'; t.completed_by = done ? currentUserName : null; }
+      renderTabContent(activeClient);
+    }
+  } catch (err) {
+    console.error('Error toggling task:', err);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  MAE DRAFT
+// ─────────────────────────────────────────────
+function showMaeDraft(client, emailSummary, autoFollowUp) {
+  const evtLabel = eventTypeLabel(client.type || 'wedding');
+  const evtDate  = client.weddingDate ? ` on ${formatDate(client.weddingDate)}` : '';
+  const firstName = (client.name || '').split(' & ')[0].split(' ')[0] || 'there';
+  const followNote = autoFollowUp ? '\n\nNote: A 3-day follow-up reminder has been set automatically.' : '';
+
+  const subject = `Following up — Your ${evtLabel} at Gunflint Lodge`;
+  const body =
+`Hi ${firstName},
+
+Thank you for reaching out about your ${evtLabel.toLowerCase()}${evtDate} at Gunflint Lodge! I wanted to follow up on our recent conversation and make sure all your questions are answered.
+
+[Add context here based on what was discussed]
+
+I'm here every step of the way to make sure your day at Gunflint is everything you've envisioned. Please don't hesitate to reach out with any questions or ideas.
+
+Looking forward to working with you!
+
+Warm regards,
+Mae
+Weddings & Events Coordinator
+Gunflint Lodge & Outfitters
+(800) 328-3325
+wedding@gunflint.com${followNote}`;
+
+  document.getElementById('md-subject').value = subject;
+  document.getElementById('md-body').value = body;
+  document.getElementById('maeDraftModal').classList.remove('hidden');
+}
+
+function copyDraft() {
+  const subject = document.getElementById('md-subject').value;
+  const body = document.getElementById('md-body').value;
+  navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`).then(() => {
+    alert('Draft copied to clipboard!');
+    closeModal('maeDraftModal');
+  });
+}
+
+function eventTypeLabel(t) {
+  return {
+    wedding: 'Wedding', elopement: 'Elopement', corporate: 'Corporate Event',
+    anniversary: 'Anniversary', family_reunion: 'Family Reunion', other: 'Event'
+  }[t] || 'Event';
+}
+
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+function formatDate(d) {
+  if (!d) return 'TBD';
+  const dt = new Date(d + 'T12:00:00');
+  return dt.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+}
+function formatRelDate(d) {
+  if (!d) return '';
+  const diff = Math.floor((new Date() - new Date(d+'T12:00:00')) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  if (diff < 7) return `${diff}d ago`;
+  if (diff < 30) return `${Math.floor(diff/7)}w ago`;
+  return formatDate(d);
+}
+function statusLabel(s) {
+  return {inquiry:'Inquiry',proposal:'Proposal',booked:'Booked',complete:'Complete',lost:'Lost'}[s]||s;
+}
+function etypeLabel(t) {
+  return {email:'Email',call:'Call',meeting:'Meeting',site:'Site Visit',note:'Note'}[t]||t;
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.overlay').forEach(el => {
+  el.addEventListener('click', e => {
+    if (e.target === el) el.classList.add('hidden');
+  });
+});
+
+// ─────────────────────────────────────────────
+//  PROMOTE ACTION ITEM → TASK
+// ─────────────────────────────────────────────
+function promoteToTask(actionId, itemText) {
+  document.getElementById('pt-action-id').value = actionId;
+  document.getElementById('pt-title').value = itemText;
+  // Default due date: 7 days out
+  const d = new Date(); d.setDate(d.getDate() + 7);
+  document.getElementById('pt-due').value = d.toISOString().split('T')[0];
+  // Default assigned to current user
+  const sel = document.getElementById('pt-assigned');
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === currentUserName) { sel.selectedIndex = i; break; }
+  }
+  document.getElementById('promoteTaskModal').classList.remove('hidden');
+}
+
+async function savePromotedTask() {
+  if (!activeClient) return;
+  const title = document.getElementById('pt-title').value.trim();
+  if (!title) return alert('Task title is required.');
+  const actionId = document.getElementById('pt-action-id').value;
+  const due = document.getElementById('pt-due').value;
+  const assignedTo = document.getElementById('pt-assigned').value;
+
+  try {
+    // Create the task
+    const { error: tErr } = await _supabase.from('tasks').insert({
+      client_id: activeClient.id,
+      title,
+      due_date: due || null,
+      assigned_to: assignedTo,
+      status: 'pending'
+    });
+    if (tErr) throw tErr;
+
+    // Mark the action item done so it's clear it was promoted
+    await _supabase.from('action_items').update({ done: true }).eq('id', actionId);
+
+    closeModal('promoteTaskModal');
+    // Refresh client data and switch to tasks tab
+    await selectClient(activeClient.id);
+    activeTab = 'tasks';
+    renderTabContent(activeClient);
+  } catch (err) {
+    console.error('Error promoting to task:', err);
+    alert('Error creating task.');
+  }
+}
+
+// ─────────────────────────────────────────────
+//  MY TASKS VIEW
+// ─────────────────────────────────────────────
+let myTasksVisible = false;
+
+function toggleMyTasksView() {
+  myTasksVisible = !myTasksVisible;
+  document.getElementById('myTasksView').style.display = myTasksVisible ? 'flex' : 'none';
+  document.getElementById('mainView').style.display = myTasksVisible ? 'none' : 'flex';
+  document.getElementById('myTasksBtn').style.background = myTasksVisible ? 'rgba(255,255,255,.2)' : 'none';
+  if (myTasksVisible) renderMyTasks();
+}
+
+function setMyTasksFilter(mode) {
+  myTasksFilterMode = mode;
+  ['pending','done','all'].forEach(m => {
+    const btn = document.getElementById('mtf-' + m);
+    btn.className = m === mode ? 'btn-primary' : 'btn-ghost';
+    btn.style.fontSize = '12px';
+    btn.style.padding = '5px 14px';
+  });
+  renderMyTasks();
+}
+
+async function renderMyTasks() {
+  const el = document.getElementById('myTasksList');
+  el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0;">Loading…</div>';
+
+  // Fetch all tasks assigned to current user
+  let q = _supabase
+    .from('tasks')
+    .select('id, title, description, due_date, status, assigned_to, completed_by, created_at, clients(id, name)')
+    .eq('assigned_to', currentUserName)
+    .order('created_at', { ascending: false });
+
+  if (myTasksFilterMode === 'pending') q = q.eq('status', 'pending');
+  else if (myTasksFilterMode === 'done') q = q.eq('status', 'done');
+
+  const { data: tasks, error } = await q;
+  if (error) { el.innerHTML = '<div style="color:var(--red);">Error loading tasks.</div>'; return; }
+  if (!tasks || tasks.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:48px 0;color:var(--muted);font-size:14px;">
+      ${myTasksFilterMode === 'pending' ? '✅ All caught up — no open tasks!' : 'No tasks found.'}
+    </div>`;
+    return;
+  }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  el.innerHTML = tasks.map(t => {
+    const clientName = t.clients?.name || 'Unknown';
+    const clientId = t.clients?.id;
+    const dueStr = t.due_date ? formatDate(t.due_date) : null;
+    const isOverdue = t.due_date && new Date(t.due_date + 'T12:00:00') < today && t.status !== 'done';
+    const createdStr = t.created_at ? new Date(t.created_at).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '';
+    return `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px;">
+      <input type="checkbox" class="task-check" ${t.status==='done'?'checked':''}
+        onchange="toggleMyTask('${t.id}', this.checked)"
+        style="margin-top:3px;cursor:pointer;width:15px;height:15px;flex-shrink:0;accent-color:var(--forest);"/>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;${t.status==='done'?'text-decoration:line-through;color:var(--muted);':''}">${t.title}</div>
+        ${t.description ? `<div style="font-size:12px;color:var(--muted);margin-top:2px;">${t.description}</div>` : ''}
+        <div style="display:flex;gap:12px;margin-top:5px;flex-wrap:wrap;align-items:center;">
+          <span style="font-size:11px;background:var(--forest-pale);color:var(--forest);padding:2px 8px;border-radius:10px;cursor:pointer;"
+            onclick="jumpToClient('${clientId}')">${clientName}</span>
+          ${dueStr ? `<span style="font-size:11px;color:${isOverdue?'var(--red)':'var(--muted)'};font-weight:${isOverdue?'600':'400'};">
+            ${isOverdue?'⚠️ Overdue · ':'Due: '}${dueStr}</span>` : ''}
+          <span style="font-size:11px;color:var(--muted);">Added ${createdStr}</span>
+          ${t.status === 'done' && t.completed_by && t.completed_by !== currentUserName ? `<span style="font-size:11px;color:var(--muted);">· completed by ${t.completed_by}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleMyTask(taskId, done) {
+  await _supabase.from('tasks').update({
+    status: done ? 'done' : 'pending',
+    completed_at: done ? new Date().toISOString() : null,
+    completed_by: done ? currentUserName : null
+  }).eq('id', taskId);
+  renderMyTasks();
+}
+
+function jumpToClient(clientId) {
+  if (!clientId) return;
+  toggleMyTasksView(); // close My Tasks view
+  selectClient(clientId);
+}
+
+// ─────────────────────────────────────────────
+//  INIT — check auth before loading data
+// ─────────────────────────────────────────────
+(async () => {
+  const { data: { session } } = await _supabase.auth.getSession();
+  if (session) {
+    currentUserName = EMAIL_TO_NAME[session.user?.email] || 'Mae';
+    loadAppData();
+  } else {
+    showLoginScreen(true);
+  }
+})();
+</script>
+</body>
+</html>
