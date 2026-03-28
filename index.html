@@ -575,7 +575,7 @@ async function doLogin() {
   } else {
     showLoginScreen(false);
     const { data: { user } } = await _supabase.auth.getUser();
-    currentUserName = EMAIL_TO_NAME[user?.email] || 'Mae';
+    currentUserName = user?.user_metadata?.name || EMAIL_TO_NAME[user?.email] || 'Mae';
     loadAppData();
   }
 }
@@ -600,9 +600,9 @@ let currentUserName = 'Mae';
 let myTasksFilterMode = 'pending';
 
 const EMAIL_TO_NAME = {
-  'mae@gunflint.com': 'Mae',
+  'wedding@gunflint.com': 'Mae',
   'mindy@gunflint.com': 'Mindy',
-  'ron@gunflint.com': 'Ron',
+  'activities@gunflint.com': 'Ron',
   'john@gunflint.com': 'John'
 };
 let activeFilter = 'all';
@@ -1956,7 +1956,7 @@ function jumpToClient(clientId) {
 (async () => {
   const { data: { session } } = await _supabase.auth.getSession();
   if (session) {
-    currentUserName = EMAIL_TO_NAME[session.user?.email] || 'Mae';
+    currentUserName = session.user?.user_metadata?.name || EMAIL_TO_NAME[session.user?.email] || 'Mae';
     loadAppData();
   } else {
     showLoginScreen(true);
