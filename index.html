@@ -1391,6 +1391,9 @@ async function saveWeddingDetails() {
       await _supabase.from('vendors').insert(toAdd.map(v => ({ ...v, client_id: c.id })));
     }
 
+    // Auto-generate timeline from key event times
+    await autoGenerateTimeline(c.id, updateData);
+
     editingDetails = false;
     pendingVendorDeletes = [];
     pendingVendorAdds = [];
@@ -1423,32 +1426,54 @@ function liveUpdateVendor(id, field, value) {
 
 function renderDayOf(c) {
   const wd = c.weddingDetails;
-  if (!wd.timeline || wd.timeline.length === 0) {
-    return `<div style="color:var(--muted);font-size:14px;text-align:center;padding:40px;">No day-of timeline built yet.<br><small>Add entries to the Wedding Details to populate this plan.</small></div>`;
-  }
-  return `
-    <div class="dop-header">
-      <h3>Day-of Operations Plan — ${formatDate(c.weddingDate)}</h3>
-      <button class="btn-ghost" onclick="window.print()">🖨 Print</button>
-    </div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:16px;margin-bottom:16px;font-size:13px;">
-      <strong>Coordinator:</strong> ${c.assigned_to} &nbsp;·&nbsp;
-      <strong>Guest Count:</strong> ${c.guest_count} &nbsp;·&nbsp;
-      <strong>Ceremony:</strong> ${wd.ceremony.location} @ ${wd.ceremony.time} &nbsp;·&nbsp;
-      <strong>Reception:</strong> ${wd.reception.location}
-    </div>
+  const hasTimeline = wd.timeline && wd.timeline.length > 0;
+
+  const timelineHtml = hasTimeline ? `
     <div class="tl">
       ${wd.timeline.map(t => `
         <div class="tl-item">
-          <div class="tl-time">${t.event_time}</div>
-          <div class="tl-dot-wrap"><div class="tl-dot"></div><div class="tl-line"></div></div>
+          <div class="tl-time">${t.event_time || '—'}</div>
+          <div class="tl-dot-wrap"><div class="tl-dot ${t.is_auto ? '' : 'tl-dot-manual'}"></div><div class="tl-line"></div></div>
           <div class="tl-body">
-            <div class="tl-event">${t.event_name}</div>
-            <div class="tl-detail">${[t.location, t.staff].filter(Boolean).join(' · ')}</div>
+            <div class="tl-event">${t.event_name}${t.is_auto ? '' : ' <span style="font-size:11px;color:var(--muted);">(custom)</span>'}</div>
+            <div class="tl-detail">${[t.location, t.notes].filter(Boolean).join(' · ')}</div>
           </div>
+          <button class="btn-ghost" style="font-size:12px;padding:2px 8px;margin-left:8px;color:var(--red);" onclick="deleteTimelineEntry('${t.id}')">✕</button>
         </div>
       `).join('')}
     </div>
+  ` : `<div style="color:var(--muted);font-size:14px;text-align:center;padding:24px 40px;">
+    No timeline yet — fill in event times on the <strong>Event Details</strong> tab and save, or add entries manually below.
+  </div>`;
+
+  return `
+    <div class="dop-header">
+      <h3>Day-of Operations Plan${c.weddingDate ? ' — ' + formatDate(c.weddingDate) : ''}</h3>
+      <button class="btn-ghost" onclick="window.print()">🖨 Print</button>
+    </div>
+    ${hasTimeline ? `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:16px;margin-bottom:16px;font-size:13px;">
+      <strong>Coordinator:</strong> ${c.assigned_to || '—'} &nbsp;·&nbsp;
+      <strong>Guests:</strong> ${wd.guests?.total || c.guest_count || '—'} &nbsp;·&nbsp;
+      <strong>Ceremony:</strong> ${wd.ceremony.location || '—'} @ ${wd.ceremony.time || '—'} &nbsp;·&nbsp;
+      <strong>Reception:</strong> ${wd.reception.location || '—'}
+    </div>` : ''}
+    ${timelineHtml}
+
+    <!-- Add Entry Form -->
+    <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:16px;margin-top:16px;">
+      <div class="wd-title" style="margin-bottom:12px;">➕ Add Timeline Entry</div>
+      <div style="display:grid;grid-template-columns:120px 1fr 1fr;gap:8px;margin-bottom:8px;">
+        <input id="tl-add-time" type="text" placeholder="Time (e.g. 4:00 PM)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;" />
+        <input id="tl-add-name" type="text" placeholder="Event name *" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;" />
+        <input id="tl-add-loc" type="text" placeholder="Location (optional)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;" />
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;">
+        <input id="tl-add-notes" type="text" placeholder="Notes (optional)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;" />
+        <button class="btn-primary" onclick="addTimelineEntry()">Add Entry</button>
+      </div>
+    </div>
+
     ${wd.vendors && wd.vendors.length ? `
       <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:16px;margin-top:16px;">
         <div class="wd-title" style="margin-bottom:12px;">Vendor Contacts</div>
@@ -1460,16 +1485,91 @@ function renderDayOf(c) {
         `).join('')}
       </div>
     ` : ''}
-    ${wd.dining ? `
+    ${wd.dining && (wd.dining.style || wd.dining.entrees) ? `
       <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:16px;margin-top:16px;">
         <div class="wd-title" style="margin-bottom:12px;">Dining Summary</div>
-        <div class="vendor-row"><span class="vendor-type">Style</span><span>${wd.dining.style}</span></div>
-
-        <div class="vendor-row"><span class="vendor-type">Entrées</span><span>${wd.dining.entrees}</span></div>
+        ${wd.dining.style ? `<div class="vendor-row"><span class="vendor-type">Style</span><span>${wd.dining.style}</span></div>` : ''}
+        ${wd.dining.entrees ? `<div class="vendor-row"><span class="vendor-type">Entrées</span><span>${wd.dining.entrees}</span></div>` : ''}
         ${wd.dining.dietary ? `<div class="vendor-row"><span class="vendor-type">Dietary</span><span style="color:var(--red);font-weight:600;">${wd.dining.dietary}</span></div>` : ''}
       </div>
     ` : ''}
   `;
+}
+
+// ─────────────────────────────────────────────
+//  TIMELINE AUTO-GENERATE + MANAGEMENT
+// ─────────────────────────────────────────────
+
+async function autoGenerateTimeline(clientId, wd) {
+  // Build auto entries from known event times
+  const entries = [];
+  let sort = 10;
+
+  if (wd.ceremony_setup_time) {
+    entries.push({ sort_order: sort, event_time: wd.ceremony_setup_time, event_name: 'Ceremony Setup', location: wd.ceremony_location || null, notes: null, is_auto: true });
+    sort += 10;
+  }
+  if (wd.ceremony_time) {
+    entries.push({ sort_order: sort, event_time: wd.ceremony_time, event_name: 'Ceremony', location: wd.ceremony_location || null, notes: wd.ceremony_notes || null, is_auto: true });
+    sort += 10;
+  }
+  if (wd.cocktail_time) {
+    entries.push({ sort_order: sort, event_time: wd.cocktail_time, event_name: 'Cocktail Hour', location: wd.cocktail_location || null, notes: wd.cocktail_notes || null, is_auto: true });
+    sort += 10;
+  }
+  if (wd.reception_time) {
+    entries.push({ sort_order: sort, event_time: wd.reception_time, event_name: 'Reception / Dinner', location: wd.reception_location || null, notes: wd.reception_notes || null, is_auto: true });
+    sort += 10;
+  }
+  if (wd.reception_end_time) {
+    entries.push({ sort_order: sort, event_time: wd.reception_end_time, event_name: 'Reception End / Send-off', location: wd.reception_location || null, notes: null, is_auto: true });
+    sort += 10;
+  }
+
+  if (entries.length === 0) return;
+
+  // Delete existing auto-generated entries, keep manually-added ones
+  await _supabase.from('timeline_events').delete().eq('client_id', clientId).eq('is_auto', true);
+
+  // Insert new auto entries
+  await _supabase.from('timeline_events').insert(entries.map(e => ({ ...e, client_id: clientId })));
+}
+
+async function addTimelineEntry() {
+  const c = activeClient;
+  if (!c) return;
+  const time  = document.getElementById('tl-add-time')?.value?.trim();
+  const name  = document.getElementById('tl-add-name')?.value?.trim();
+  const loc   = document.getElementById('tl-add-loc')?.value?.trim();
+  const notes = document.getElementById('tl-add-notes')?.value?.trim();
+  if (!name) { alert('Event name is required.'); return; }
+
+  // Find max sort_order
+  const existing = c.weddingDetails.timeline || [];
+  const maxSort = existing.length ? Math.max(...existing.map(e => e.sort_order || 0)) : 0;
+
+  const { error } = await _supabase.from('timeline_events').insert({
+    client_id: c.id,
+    event_time: time || null,
+    event_name: name,
+    location: loc || null,
+    notes: notes || null,
+    is_auto: false,
+    sort_order: maxSort + 10
+  });
+  if (error) { alert('Error adding entry: ' + error.message); return; }
+  await fetchClientDeepDetails(c.id);
+  activeTab = 'dayof';
+  renderDetail();
+}
+
+async function deleteTimelineEntry(id) {
+  if (!confirm('Remove this timeline entry?')) return;
+  const { error } = await _supabase.from('timeline_events').delete().eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  await fetchClientDeepDetails(activeClient.id);
+  activeTab = 'dayof';
+  renderDetail();
 }
 
 // ─────────────────────────────────────────────
