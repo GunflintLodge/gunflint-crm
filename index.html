@@ -513,6 +513,22 @@
   </div>
 </div>
 
+<!-- MODAL: Edit Contact Info -->
+<div class="overlay hidden" id="editContactModal">
+  <div class="modal" style="width:460px;">
+    <h3>✏️ Edit Contact Info</h3>
+    <div class="fg"><label>Partner 1 Name</label><input id="ec-p1" placeholder="First & Last Name"/></div>
+    <div class="fg"><label>Partner 2 Name <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input id="ec-p2" placeholder="First & Last Name"/></div>
+    <div class="fg"><label>Email</label><input id="ec-email" type="email" placeholder="email@example.com"/></div>
+    <div class="fg"><label>Phone</label><input id="ec-phone" type="tel" placeholder="612-555-0100"/></div>
+    <div class="fg"><label>Address</label><input id="ec-address" placeholder="123 Main St, City, ST 55000"/></div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('editContactModal')">Cancel</button>
+      <button class="btn-primary" onclick="saveEditContact()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Log Contact -->
 <div class="overlay hidden" id="logContactModal">
   <div class="modal">
@@ -921,10 +937,14 @@ function renderOverview(c) {
   return `
     <div class="ov-grid">
       <div class="ov-card">
-        <div class="ov-card-title">Contact Info</div>
-        <div class="ov-row"><span class="ov-key">Email</span><span class="ov-val">${c.email}</span></div>
-        <div class="ov-row"><span class="ov-key">Phone</span><span class="ov-val">${c.phone}</span></div>
-        <div class="ov-row"><span class="ov-key">How they found us</span><span class="ov-val">${c.source}</span></div>
+        <div class="ov-card-title" style="display:flex;justify-content:space-between;align-items:center;">
+          Contact Info
+          <button class="btn-ghost" style="font-size:11px;padding:3px 10px;" onclick="openEditContactModal()">✏️ Edit</button>
+        </div>
+        <div class="ov-row"><span class="ov-key">Email</span><span class="ov-val">${c.email || '—'}</span></div>
+        <div class="ov-row"><span class="ov-key">Phone</span><span class="ov-val">${c.phone || '—'}</span></div>
+        ${c.address ? `<div class="ov-row"><span class="ov-key">Address</span><span class="ov-val">${c.address}</span></div>` : ''}
+        <div class="ov-row"><span class="ov-key">How they found us</span><span class="ov-val">${c.source || '—'}</span></div>
         <div class="ov-row"><span class="ov-key">Created</span><span class="ov-val">${formatDate(c.created_at)}</span></div>
       </div>
       <div class="ov-card">
@@ -1575,6 +1595,51 @@ async function deleteTimelineEntry(id) {
 // ─────────────────────────────────────────────
 //  MODALS
 // ─────────────────────────────────────────────
+function openEditContactModal() {
+  if (!activeClient) return;
+  const c = activeClient;
+  // Split name back into parts (format: "Partner1 & Partner2" or just "Partner1")
+  const parts = c.name.split(' & ');
+  document.getElementById('ec-p1').value = parts[0] || '';
+  document.getElementById('ec-p2').value = parts[1] || '';
+  document.getElementById('ec-email').value = c.email || '';
+  document.getElementById('ec-phone').value = c.phone || '';
+  document.getElementById('ec-address').value = c.address || '';
+  document.getElementById('editContactModal').classList.remove('hidden');
+}
+
+async function saveEditContact() {
+  if (!activeClient) return;
+  const p1 = document.getElementById('ec-p1').value.trim();
+  const p2 = document.getElementById('ec-p2').value.trim();
+  if (!p1) return alert('Partner 1 name is required.');
+
+  const updates = {
+    name: p2 ? `${p1} & ${p2}` : p1,
+    email: document.getElementById('ec-email').value.trim(),
+    phone: document.getElementById('ec-phone').value.trim(),
+    address: document.getElementById('ec-address').value.trim()
+  };
+
+  showLoading(true);
+  const { error } = await _supabase
+    .from('clients')
+    .update(updates)
+    .eq('id', activeClient.id);
+  showLoading(false);
+
+  if (error) return alert('Error saving: ' + error.message);
+
+  // Update local state
+  Object.assign(activeClient, updates);
+  const idx = clients.findIndex(c => c.id === activeClient.id);
+  if (idx !== -1) Object.assign(clients[idx], updates);
+
+  closeModal('editContactModal');
+  renderClientList();
+  renderDetail();
+}
+
 function openNewClientModal() {
   document.getElementById('newClientModal').classList.remove('hidden');
   document.getElementById('nc-wdate').value = '';
