@@ -363,6 +363,7 @@
   <div class="topbar-search"><input id="searchInput" placeholder="Search clients…" oninput="filterClients()" /></div>
   <button class="btn-add" onclick="openNewClientModal()">+ New Client</button>
   <button id="myTasksBtn" onclick="toggleMyTasksView()" style="background:none;border:1px solid rgba(255,255,255,.25);color:#eee;font-size:12px;cursor:pointer;padding:4px 12px;border-radius:6px;margin-right:6px;" title="My Tasks">📋 My Tasks</button>
+  <button id="actionItemsBtn" onclick="toggleActionItemsView()" style="background:none;border:1px solid rgba(255,255,255,.25);color:#eee;font-size:12px;cursor:pointer;padding:4px 12px;border-radius:6px;margin-right:6px;" title="Action Items">⚡ Actions</button>
   <button onclick="doSignOut()" style="background:none;border:none;color:#aaa;font-size:12px;cursor:pointer;padding:0 12px;" title="Sign out">⎋ Sign out</button>
 </div>
 
@@ -381,6 +382,21 @@
       </div>
     </div>
     <div id="myTasksList"></div>
+  </div>
+</div>
+
+<!-- ACTION ITEMS VIEW -->
+<div id="actionItemsView" style="display:none;flex:1;overflow-y:auto;padding:24px 32px;background:var(--cream);">
+  <div style="max-width:980px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:18px;color:var(--forest);font-weight:700;">⚡ Action Items</h2>
+      <div style="display:flex;gap:8px;">
+        <button onclick="setActionItemsFilter('overdue')" id="aif-overdue" class="btn-primary" style="font-size:12px;padding:5px 14px;">Overdue</button>
+        <button onclick="setActionItemsFilter('upcoming')" id="aif-upcoming" class="btn-ghost" style="font-size:12px;padding:5px 14px;">Next 7 Days</button>
+        <button onclick="setActionItemsFilter('all')" id="aif-all" class="btn-ghost" style="font-size:12px;padding:5px 14px;">All</button>
+      </div>
+    </div>
+    <div id="actionItemsList"></div>
   </div>
 </div>
 
@@ -2111,8 +2127,135 @@ async function toggleMyTask(taskId, done) {
 
 function jumpToClient(clientId) {
   if (!clientId) return;
-  toggleMyTasksView(); // close My Tasks view
+  if (myTasksVisible) toggleMyTasksView(); // close My Tasks view
+  if (actionItemsVisible) toggleActionItemsView(); // close Action Items view
   selectClient(clientId);
+}
+
+// ─────────────────────────────────────────────
+//  ACTION ITEMS VIEW
+// ─────────────────────────────────────────────
+let actionItemsVisible = false;
+let actionItemsFilterMode = 'overdue';
+
+function toggleActionItemsView() {
+  actionItemsVisible = !actionItemsVisible;
+  document.getElementById('actionItemsView').style.display = actionItemsVisible ? 'flex' : 'none';
+  document.getElementById('mainView').style.display = actionItemsVisible ? 'none' : 'flex';
+  document.getElementById('actionItemsBtn').style.background = actionItemsVisible ? 'rgba(255,255,255,.2)' : 'none';
+  // Also close My Tasks if open
+  if (actionItemsVisible && myTasksVisible) {
+    myTasksVisible = false;
+    document.getElementById('myTasksView').style.display = 'none';
+    document.getElementById('myTasksBtn').style.background = 'none';
+  }
+  if (actionItemsVisible) renderActionItems();
+}
+
+function setActionItemsFilter(mode) {
+  actionItemsFilterMode = mode;
+  ['overdue','upcoming','all'].forEach(m => {
+    const btn = document.getElementById('aif-' + m);
+    btn.className = m === mode ? 'btn-primary' : 'btn-ghost';
+    btn.style.fontSize = '12px';
+    btn.style.padding = '5px 14px';
+  });
+  renderActionItems();
+}
+
+async function renderActionItems() {
+  const el = document.getElementById('actionItemsList');
+  el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0;">Loading…</div>';
+
+  // Fetch all active clients with next_action_date
+  let q = _supabase
+    .from('clients')
+    .select('id, name, email, type, status, next_action, next_action_date, guest_count')
+    .neq('status', 'cancelled')
+    .neq('status', 'complete')
+    .not('next_action_date', 'is', null)
+    .order('next_action_date', { ascending: true });
+
+  const { data: clients, error } = await q;
+  if (error) { el.innerHTML = '<div style="color:var(--red);">Error loading action items.</div>'; return; }
+  if (!clients || clients.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:48px 0;color:var(--muted);font-size:14px;">No action items found.</div>';
+    return;
+  }
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const sevenDays = new Date(today);
+  sevenDays.setDate(sevenDays.getDate() + 7);
+
+  // Filter based on mode
+  let filtered = clients;
+  if (actionItemsFilterMode === 'overdue') {
+    filtered = clients.filter(c => new Date(c.next_action_date + 'T12:00:00') < today);
+  } else if (actionItemsFilterMode === 'upcoming') {
+    filtered = clients.filter(c => {
+      const d = new Date(c.next_action_date + 'T12:00:00');
+      return d >= today && d <= sevenDays;
+    });
+  }
+
+  if (filtered.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:48px 0;color:var(--muted);font-size:14px;">
+      ${actionItemsFilterMode === 'overdue' ? '✅ No overdue items — great job!' : 
+        actionItemsFilterMode === 'upcoming' ? '📅 No action items in the next 7 days.' : 
+        'No action items found.'}
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = filtered.map(c => {
+    const dueDate = new Date(c.next_action_date + 'T12:00:00');
+    const isOverdue = dueDate < today;
+    const daysUntil = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+    let dueLabel = '';
+    if (isOverdue) {
+      const daysOver = Math.abs(daysUntil);
+      dueLabel = `⚠️ ${daysOver} day${daysOver !== 1 ? 's' : ''} overdue`;
+    } else if (daysUntil === 0) {
+      dueLabel = '📌 Due today';
+    } else if (daysUntil === 1) {
+      dueLabel = 'Due tomorrow';
+    } else {
+      dueLabel = `Due in ${daysUntil} days`;
+    }
+
+    const statusClass = {
+      inquiry: 's-inquiry',
+      proposal: 's-proposal',
+      booked: 's-booked',
+      complete: 's-complete',
+      cold: 's-lost'
+    }[c.status] || 's-inquiry';
+
+    return `
+    <div style="background:#fff;border:1px solid ${isOverdue ? 'var(--red)' : 'var(--border)'};border-left:4px solid ${isOverdue ? 'var(--red)' : 'var(--gold)'};border-radius:9px;padding:14px 18px;margin-bottom:12px;cursor:pointer;transition:box-shadow .15s;"
+      onclick="jumpToClient('${c.id}')" onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;color:var(--forest);margin-bottom:3px;">${c.name}</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+            <span class="spill ${statusClass}">${c.status}</span>
+            <span style="font-size:11px;color:var(--muted);">${c.type || 'wedding'}</span>
+            ${c.guest_count ? `<span style="font-size:11px;color:var(--muted);">· ${c.guest_count} guests</span>` : ''}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px;">
+          <div style="font-size:12px;font-weight:600;color:${isOverdue ? 'var(--red)' : 'var(--muted)'};"
+            title="${formatDate(c.next_action_date)}">${dueLabel}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${formatDate(c.next_action_date)}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text);line-height:1.4;">
+        <strong>Action:</strong> ${c.next_action || 'No action specified'}
+      </div>
+      ${c.email ? `<div style="font-size:11px;color:var(--muted);margin-top:6px;">✉️ ${c.email}</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 // ─────────────────────────────────────────────
